@@ -15,6 +15,72 @@
 
     Contact: edvgui@gmail.com
 """
-greeting = hello("world")
+import std
+import files::host
+import files::json
 
-std::print(greeting)
+typedef operation_t as string matching self in ["replace", "merge", "remove"]
+"""
+Define the type of operation to apply for a batch of data in a desired state.
+These operations are inspired from the netconf yang specifications and have the
+same semantic.
+cf. https://datatracker.ietf.org/doc/html/rfc4741#section-7.2
+"""
+
+
+entity BaseFile extends std::PurgeableResource:
+    """
+    Base entity representing a file on a host.
+
+    :attr path: The path where the file should be managed.
+    :attr permissions: The permissions to set on the file.
+    :attr owner: The name of the user owning of the file.
+    :attr group: The name of the group owning the file.
+    """
+    string path
+    int permissions = 744
+    string owner
+    string group
+end
+BaseFile.host [1] -- std::Host
+"""
+The host that this file is managed on.
+"""
+
+
+entity HostFile extends BaseFile:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    """
+end
+HostFile.entries [0:] -- files::host::Entry.host_file [1]
+"""
+All the entries present in the host file.
+"""
+
+index HostFile(host, path)
+
+implement HostFile using std::none
+
+
+entity JsonFile extends BaseFile:
+    """
+    A JsonFile on the given host.  The resource contains a set of values
+    that needs to be enforced on the given file.  See files::json::Value for
+    more information about the usage of said values.
+
+    :attr indent: The indentiation to use when writing in the file.
+    """
+    int indent = 2
+    bool send_event = true
+end
+JsonFile.values [0:] -- files::json::Value.json_file [1]
+"""
+The set of values that will be enforced in the file.
+"""
+
+index JsonFile(host, path)
+
+implement JsonFile using std::none

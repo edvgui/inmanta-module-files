@@ -19,10 +19,4 @@ from pytest_inmanta.plugin import Project
 
 
 def test_basics(project: Project) -> None:
-    project.compile(
-        """
-            import files
-        """
-    )
-
-    assert project.get_stdout() == "hello world\n"
+    project.compile("import files")
