@@ -47,6 +47,8 @@ BaseFile.host [1] -- std::Host
 The host that this file is managed on.
 """
 
+index BaseFile(host, path)
+
 
 entity HostFile extends BaseFile:
     """
@@ -59,8 +61,6 @@ HostFile.entries [0:] -- files::host::Entry.host_file [1]
 """
 All the entries present in the host file.
 """
-
-index HostFile(host, path)
 
 implement HostFile using std::none
 
@@ -81,6 +81,23 @@ JsonFile.values [0:] -- files::json::Value.json_file [1]
 The set of values that will be enforced in the file.
 """
 
-index JsonFile(host, path)
-
 implement JsonFile using std::none
+
+
+entity XmlFile extends BaseFile:
+    """
+    An XmlFile on the given host.  The resource contains a subset of the file
+    content, bound to operations that specify how to apply this desired content
+    to the file.
+
+    :attr indent: The indentiation to set when saving the xml object back to file.
+    """
+    int indent = 2
+    bool send_event = true
+end
+XmlFile.values [0:] -- files::xml::Value.xml_file [1]
+"""
+The set of values that will be enforced in the file.
+"""
+
+implement XmlFile using std::none
