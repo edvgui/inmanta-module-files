@@ -47,7 +47,6 @@ entity Element:
     dict attributes = {}
     string? text = null
 end
-Element.children [0:] -- Element.parent [0:1]
 
 implement Value using std::none
 implement Element using std::none
