@@ -1,0 +1,89 @@
+{%- if self.unit is defined %}
+[Unit]
+{%- if self.unit.description is not none %}
+Description={{ self.unit.description }}
+{%- endif %}
+{%- if self.unit.documentation is not none %}
+Documentation={{ self.unit.documentation | join(' ') }}
+{%- endif %}
+{%- if self.unit.requires_mounts_for is not none %}
+RequiresMountsFor={{ self.unit.requires_mounts_for | join(' ') }}
+{%- endif %}
+{%- for requires in self.unit.requires %}
+Requires={{ requires }}
+{%- endfor %}
+{%- for wants in self.unit.wants %}
+Wants={{ wants }}
+{%- endfor %}
+{%- for binds_to in self.unit.binds_to %}
+BindsTo={{ binds_to }}
+{%- endfor %}
+{%- for before in self.unit.before %}
+Before={{ before }}
+{%- endfor %}
+{%- for after in self.unit.after %}
+After={{ after }}
+{%- endfor %}
+{%- endif %}
+
+{%- if self.service is defined %}
+[Service]
+{%- for name, value in self.service.environment.items() %}
+Environment={{ name }}={{ value }}
+{%- endfor %}
+{%- if self.service.restart is not none %}
+Restart={{ self.service.restart }}
+{%- endif %}
+{%- if self.service.timeout_start_sec is not none %}
+TimeoutStartSec={{ self.service.timeout_start_sec }}
+{%- endif %}
+{%- if self.service.timeout_sec is not none %}
+TimeoutSec={{ self.service.timeout_sec }}
+{%- endif %}
+{%- if self.service.timeout_stop_sec is not none %}
+TimeoutStopSec={{ self.service.timeout_stop_sec }}
+{%- endif %}
+{%- if self.service.restart_sec is not none %}
+RestartSec={{ self.service.restart_sec }}
+{%- endif %}
+{%- if self.service.exec_start_pre is not none %}
+ExecStartPre={{ self.service.exec_start_pre }}
+{%- endif %}
+{%- if self.service.exec_start is not none %}
+ExecStart={{ self.service.exec_start }}
+{%- endif %}
+{%- if self.service.exec_start_post is not none %}
+ExecStartPost={{ self.service.exec_start_post }}
+{%- endif %}
+{%- if self.service.exec_stop_pre is not none %}
+ExecStopPre={{ self.service.exec_stop_pre }}
+{%- endif %}
+{%- if self.service.exec_stop is not none %}
+ExecStop={{ self.service.exec_stop }}
+{%- endif %}
+{%- if self.service.exec_stop_post is not none %}
+ExecStopPost={{ self.service.exec_stop_post }}
+{%- endif %}
+{%- if self.service.type is not none %}
+Type={{ self.service.type }}
+{%- endif %}
+{%- if self.service.notify_access is not none %}
+NotifyAccess={{ self.service.notify_access }}
+{%- endif %}
+{%- if self.service.pid_file is not none %}
+PIDFile={{ self.service.pid_file }}
+{%- endif %}
+{%- endif %}
+
+{%- if self.install is defined %}
+[Install]
+{%- if self.install.alias is not none %}
+Alias={{ self.install.alias | join(' ') }}
+{%- endif %}
+{%- for wanted_by in self.install_wanted_by %}
+WantedBy={{ wanted_by }}
+{%- endfor %}
+{%- for required_by in self.install.required_by %}
+RequiredBy={{ required_by }}
+{%- endfor %}
+{%- endif %}
