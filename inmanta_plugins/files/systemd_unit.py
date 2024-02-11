@@ -47,12 +47,12 @@ class SystemdUnitFileHandler(inmanta_plugins.files.base.BaseFileHandler[SystemdU
 
         # Load the content of the existing file
         resource.content = self._io.read_binary(resource.path).decode()
-        ctx.debug("Reading existing file", content=self.content)
+        ctx.debug("Reading existing file", content=resource.content)
 
     def create_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: SystemdUnitFileResource
     ) -> None:
-        self._io.put(resource.path, self.content.encode())
+        self._io.put(resource.path, resource.content.encode())
         super().create_resource(ctx, resource)
 
     def update_resource(

@@ -18,6 +18,7 @@
 import std
 import files::host
 import files::json
+import files::systemd_unit
 
 typedef operation_t as string matching self in ["replace", "merge", "remove"]
 """

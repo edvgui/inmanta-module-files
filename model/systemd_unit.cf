@@ -179,4 +179,7 @@ implementation file_content for files::SystemdUnitFile:
 end
 
 
+implement Unit using std::none
+implement Service using std::none
+implement Install using std::none
 implement files::SystemdUnitFile using file_content
