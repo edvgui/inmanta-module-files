@@ -30,4 +30,4 @@ jobs:
       - name: Run tests
         run: |
           echo $UID > /proc/self/loginuid
-          pytest tests
+          pytest tests -vvv --log-cli-level debug
