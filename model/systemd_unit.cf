@@ -175,6 +175,10 @@ implementation file_content for files::SystemdUnitFile:
     """
     Resolve the content of the unit file, generate it from a jinja template.
     """
+    # Define a variable that can be accessed in the template
+    unit_file = self
+
+    # Load the content based on the template
     self.content = std::template("files/systemd_unit.j2")
 end
 

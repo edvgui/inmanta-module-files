@@ -15,12 +15,38 @@
 
     Contact: edvgui@gmail.com
 """
-import json
 import os
 import pathlib
 
 import pytest
 import pytest_inmanta.plugin
+
+EXAMPLE_UNIT = """
+[Unit]
+Description=Podman inmanta-orchestrator-net.service
+Documentation=https://github.com/edvgui/inmanta-module-podman
+RequiresMountsFor=%t/containers
+Wants=network-online.target
+Wants=inmanta-orchestrator-db.service
+Wants=inmanta-orchestrator-server.service
+Before=inmanta-orchestrator-db.service
+Before=inmanta-orchestrator-server.service
+After=network-online.target
+
+[Service]
+Restart=on-failure
+TimeoutStopSec=70
+ExecStartPre=/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net
+ExecStart=/usr/bin/bash -c "/usr/bin/sleep infinity & /usr/bin/podman network inspect inmanta-orchestrator-net"
+ExecStopPost=/usr/bin/podman network rm -f inmanta-orchestrator-net
+Type=forking
+
+[Install]
+WantedBy=default.target
+
+""".lstrip(
+    "\n"
+)
 
 
 @pytest.mark.parametrize(
@@ -66,6 +92,7 @@ def test_model(
                     "inmanta-orchestrator-db.service",
                     "inmanta-orchestrator-server.service",
                 ],
+                after=["network-online.target"],
             ),
             service=Service(
                 restart="on-failure",
@@ -94,28 +121,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     assert not project.dryrun_resource("files::SystemdUnitFile")
 
     # Check that the file content is the expected one
-    assert file.read_text() == """
-[Unit]
-Description=Podman inmanta-orchestrator-net.service
-Documentation=https://github.com/edvgui/inmanta-module-podman
-RequiresMountsFor=%t/containers
-Wants=network-online.target
-Wants=inmanta-orchestrator-server.service
-Wants=inmanta-orchestrator-db.service
-Before=inmanta-orchestrator-server.service
-Before=inmanta-orchestrator-db.service
-After=network-online.target
-[Service]
-Restart=on-failure
-TimeoutStopSec=70
-ExecStartPre=/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net
-ExecStart=/usr/bin/bash -c "/usr/bin/sleep infinity & /usr/bin/podman network inspect inmanta-orchestrator-net"
-ExecStopPost=/usr/bin/podman network rm -f inmanta-orchestrator-net
-Type=forking
-
-[Install]
-WantedBy=default.target
-    """.lstrip("\n")
+    assert file.read_text() == EXAMPLE_UNIT
 
     # Delete the file
     test_model(project, file, purged=True)
