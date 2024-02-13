@@ -29,5 +29,5 @@ jobs:
           flake8 tests inmanta_plugins
       - name: Run tests
         run: |
-          echo 0 > /proc/self/loginuid
+          echo $UID | tee /proc/self/loginuid
           pytest tests
