@@ -18,6 +18,7 @@
 import std
 import files::host
 import files::json
+import files::systemd_unit
 
 typedef operation_t as string matching self in ["replace", "merge", "remove"]
 """
@@ -28,7 +29,7 @@ cf. https://datatracker.ietf.org/doc/html/rfc4741#section-7.2
 """
 
 
-entity BaseFile extends std::PurgeableResource:
+entity BaseFile extends std::PurgeableResource, std::ManagedResource:
     """
     Base entity representing a file on a host.
 
@@ -84,3 +85,29 @@ The set of values that will be enforced in the file.
 index JsonFile(host, path)
 
 implement JsonFile using std::none
+
+
+entity SystemdUnitFile extends BaseFile:
+    """
+    A systemd unit file.
+    """
+    string content
+end
+SystemdUnitFile.unit [0:1] -- files::systemd_unit::Unit
+"""
+Compose the [unit] section of the file
+"""
+
+SystemdUnitFile.service [0:1] -- files::systemd_unit::Service
+"""
+Compose the [service] section of the file
+"""
+
+SystemdUnitFile.install [0:1] -- files::systemd_unit::Install
+"""
+Compose the [install] section of the file
+"""
+
+index SystemdUnitFile(host, path)
+
+implement SystemdUnitFile using std::none

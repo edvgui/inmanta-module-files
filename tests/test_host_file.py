@@ -1,20 +1,22 @@
 """
-    Copyright 2023 Guillaume Everarts de Velp
+Copyright 2023 Guillaume Everarts de Velp
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: edvgui@gmail.com
+Contact: edvgui@gmail.com
 """
+
+import grp
 import os
 import pathlib
 
@@ -35,6 +37,7 @@ def test_model(
     project: pytest_inmanta.plugin.Project, file_path: pathlib.Path, purged: bool
 ) -> None:
     user = os.getlogin()
+    group = grp.getgrgid(os.getgid()).gr_name
     model = f"""
         import files
         import files::host
@@ -50,7 +53,7 @@ def test_model(
             host=host,
             path={repr(str(file_path))},
             owner={repr(user)},
-            group={repr(user)},
+            group={repr(group)},
             purged={str(purged).lower()},
             entries=[
                 files::host::Entry(

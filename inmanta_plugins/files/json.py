@@ -1,20 +1,21 @@
 """
-    Copyright 2023 Guillaume Everarts de Velp
+Copyright 2023 Guillaume Everarts de Velp
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: edvgui@gmail.com
+Contact: edvgui@gmail.com
 """
+
 import copy
 import enum
 import json
@@ -172,4 +173,4 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             raw_content = json.dumps(changes["content"]["desired"], indent=indent)
             self._io.put(resource.path, raw_content.encode())
 
-        super().create_resource(ctx, resource)
+        super().update_resource(ctx, changes, resource)

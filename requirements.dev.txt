@@ -1,3 +1,1 @@
-inmanta-core>=6
-inmanta-dev-dependencies[module]
-pytest-inmanta>=2
+inmanta-dev-dependencies[module]==2.108.0

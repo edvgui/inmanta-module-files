@@ -1,0 +1,92 @@
+{%- if unit_file.unit is defined -%}
+[Unit]
+{%- if unit_file.unit.description is not none %}
+Description={{ unit_file.unit.description }}
+{%- endif %}
+{%- if unit_file.unit.documentation is not none %}
+Documentation={{ unit_file.unit.documentation | join(' ') }}
+{%- endif %}
+{%- if unit_file.unit.requires_mounts_for is not none %}
+RequiresMountsFor={{ unit_file.unit.requires_mounts_for | join(' ') }}
+{%- endif %}
+{%- for requires in unit_file.unit.requires %}
+Requires={{ requires }}
+{%- endfor %}
+{%- for wants in unit_file.unit.wants %}
+Wants={{ wants }}
+{%- endfor %}
+{%- for binds_to in unit_file.unit.binds_to %}
+BindsTo={{ binds_to }}
+{%- endfor %}
+{%- for before in unit_file.unit.before %}
+Before={{ before }}
+{%- endfor %}
+{%- for after in unit_file.unit.after %}
+After={{ after }}
+{%- endfor %}
+
+{% endif -%}
+
+{%- if unit_file.service is defined -%}
+[Service]
+{%- for name, value in unit_file.service.environment.items() %}
+Environment={{ name }}={{ value }}
+{%- endfor %}
+{%- if unit_file.service.restart is not none %}
+Restart={{ unit_file.service.restart }}
+{%- endif %}
+{%- if unit_file.service.timeout_start_sec is not none %}
+TimeoutStartSec={{ unit_file.service.timeout_start_sec }}
+{%- endif %}
+{%- if unit_file.service.timeout_sec is not none %}
+TimeoutSec={{ unit_file.service.timeout_sec }}
+{%- endif %}
+{%- if unit_file.service.timeout_stop_sec is not none %}
+TimeoutStopSec={{ unit_file.service.timeout_stop_sec }}
+{%- endif %}
+{%- if unit_file.service.restart_sec is not none %}
+RestartSec={{ unit_file.service.restart_sec }}
+{%- endif %}
+{%- if unit_file.service.exec_start_pre is not none %}
+ExecStartPre={{ unit_file.service.exec_start_pre }}
+{%- endif %}
+{%- if unit_file.service.exec_start is not none %}
+ExecStart={{ unit_file.service.exec_start }}
+{%- endif %}
+{%- if unit_file.service.exec_start_post is not none %}
+ExecStartPost={{ unit_file.service.exec_start_post }}
+{%- endif %}
+{%- if unit_file.service.exec_stop_pre is not none %}
+ExecStopPre={{ unit_file.service.exec_stop_pre }}
+{%- endif %}
+{%- if unit_file.service.exec_stop is not none %}
+ExecStop={{ unit_file.service.exec_stop }}
+{%- endif %}
+{%- if unit_file.service.exec_stop_post is not none %}
+ExecStopPost={{ unit_file.service.exec_stop_post }}
+{%- endif %}
+{%- if unit_file.service.type is not none %}
+Type={{ unit_file.service.type }}
+{%- endif %}
+{%- if unit_file.service.notify_access is not none %}
+NotifyAccess={{ unit_file.service.notify_access }}
+{%- endif %}
+{%- if unit_file.service.pid_file is not none %}
+PIDFile={{ unit_file.service.pid_file }}
+{%- endif %}
+
+{% endif -%}
+
+{%- if unit_file.install is defined -%}
+[Install]
+{%- if unit_file.install.alias is not none %}
+Alias={{ unit_file.install.alias | join(' ') }}
+{%- endif %}
+{%- for wanted_by in unit_file.install.wanted_by %}
+WantedBy={{ wanted_by }}
+{%- endfor %}
+{%- for required_by in unit_file.install.required_by %}
+RequiredBy={{ required_by }}
+{%- endfor %}
+
+{% endif -%}

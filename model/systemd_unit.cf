@@ -1,0 +1,189 @@
+"""
+    Copyright 2023 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import std
+import files
+
+
+typedef service_type_t as string matching self in ["simple", "forking", "oneshot", "dbus", "notify", "idle"]
+"""
+One of the basic things that should be specified within the [Service] section is the Type= of the service.
+This categorizes services by their process and daemonizing behavior. This is important because it tells
+systemd how to correctly manage the servie and find out its state.
+
+The Type= directive can be one of the following:
+
+    simple: The main process of the service is specified in the start line. This is the default if the
+        Type= and Busname= directives are not set, but the ExecStart= is set. Any communication should
+        be handled outside of the unit through a second unit of the appropriate type (like through a
+        .socket unit if this unit must communicate using sockets).
+    forking: This service type is used when the service forks a child process, exiting the parent
+        process almost immediately. This tells systemd that the process is still running even though
+        the parent exited.
+    oneshot: This type indicates that the process will be short-lived and that systemd should wait
+        for the process to exit before continuing on with other units. This is the default Type= and
+        ExecStart= are not set. It is used for one-off tasks.
+    dbus: This indicates that unit will take a name on the D-Bus bus. When this happens, systemd will
+        continue to process the next unit.
+    notify: This indicates that the service will issue a notification when it has finished starting up.
+        The systemd process will wait for this to happen before proceeding to other units.
+    idle: This indicates that the service will not be run until all jobs are dispatched.
+
+"""
+
+
+entity Unit:
+    """
+    The first section found in most unit files is the [Unit] section. This is generally used for
+    defining metadata for the unit and configuring the relationship of the unit to other units.
+    
+    source: https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files
+
+    :attr description:  This directive can be used to describe the name and basic functionality
+        of the unit. It is returned by various systemd tools, so it is good to set this to
+        something short, specific, and informative.
+    :attr documentation: This directive provides a location for a list of URIs for documentation.
+        These can be either internally available man pages or web accessible URLs. The systemctl
+        status command will expose this information, allowing for easy discoverability.
+    :attr requires: This directive lists any units upon which this unit essentially depends. If the current
+        unit is activated, the units listed here must successfully activate as well, else this
+        unit will fail. These units are started in parallel with the current unit by default.
+    :attr wants: This directive is similar to Requires=, but less strict. Systemd will attempt to start
+        any units listed here when this unit is activated. If these units are not found or fail
+        to start, the current unit will continue to function. This is the recommended way to
+        configure most dependency relationships. Again, this implies a parallel activation unless
+        modified by other directives.
+    :attr binds_to: This directive is similar to Requires=, but also causes the current unit to stop when
+        the associated unit terminates.
+    :attr before: The units listed in this directive will not be started until the current unit is marked
+        as started if they are activated at the same time. This does not imply a dependency
+        relationship and must be used in conjunction with one of the above directives if this
+        is desired.
+    :attr after: The units listed in this directive will be started before starting the current unit.
+        This does not imply a dependency relationship and one must be established through the
+        above directives if this is required.
+    """
+    string? description = null
+    string[]? documentation = null
+    string[]? requires_mounts_for = null
+    string[] requires = []
+    string[] wants = []
+    string[] binds_to = []
+    string[] before = []
+    string[] after = []
+end
+
+
+entity Service:
+    """
+    The [Service] section is used to provide configuration that is only applicable for services.
+
+    source: https://www.digitaloce                                              an.com/community/tutorials/understanding-systemd-units-and-unit-files
+
+    :attr exec_start:  This specifies the full path and the arguments of the command to be executed to start
+        the process. This may only be specified once (except for “oneshot” services). If the path to the
+        command is preceded by a dash “-” character, non-zero exit statuses will be accepted without marking
+        the unit activation as failed.
+    :attr exec_start_pre: This can be used to provide additional commands that should be executed before the
+        main process is started. This can be used multiple times. Again, commands must specify a full path and
+        they can be preceded by “-” to indicate that the failure of the command will be tolerated.
+    :attr exec_start_post: This has the same exact qualities as ExecStartPre= except that it specifies commands
+        that will be run after the main process is started.
+    :attr exec_stop: This indicates the command needed to stop the service. If this is not given, the process
+        will be killed immediately when the service is stopped.
+    :attr exec_stop_post: This can be used to specify commands to execute following the stop command.
+    :attr restart: This indicates the circumstances under which systemd will attempt to automatically restart
+        the service. This can be set to values like “always”, “on-success”, “on-failure”, “on-abnormal”,
+        “on-abort”, or “on-watchdog”. These will trigger a restart according to the way that the service was
+        stopped.
+    :attr timeout_sec: This configures the amount of time that systemd will wait when stopping or stopping the
+        service before marking it as failed or forcefully killing it. You can set separate timeouts with
+        TimeoutStartSec= and TimeoutStopSec= as well.
+    :attr restart_sec: If automatically restarting the service is enabled, this specifies the amount of time to
+        wait before attempting to restart the service.
+    :attr notify_access: This specifies access to the socket that should be used to listen for notifications when
+        the “notify” service type is selected This can be “none”, “main”, or "all. The default, “none”, ignores
+        all status messages. The “main” option will listen to messages from the main process and the “all” option
+        will cause all members of the service’s control group to be processed.
+    :attr pid_file: If the service type is marked as “forking”, this directive is used to set the path of the file
+        that should contain the process ID number of the main child that should be monitored.
+    """
+    dict environment = {}
+    string? restart = null
+    int? timeout_start_sec = null
+    int? timeout_sec = null
+    int? timeout_stop_sec = null
+    int? restart_sec = null
+    string? exec_start_pre = null
+    string? exec_start = null
+    string? exec_start_post = null
+    string? exec_stop_pre = null
+    string? exec_stop = null
+    string? exec_stop_post = null
+    service_type_t? type = null
+    string? notify_access = null
+    string? pid_file = null
+end
+
+
+entity Install:
+    """
+    This section is optional and is used to define the behavior or a unit if it is enabled or disabled.
+    Enabling a unit marks it to be automatically started at boot. In essence, this is accomplished by
+    latching the unit in question onto another unit that is somewhere in the line of units to be started
+    at boot.
+
+    source: https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files
+
+    :attr alias: This directive allows the unit to be enabled under another name as well. Among other uses,
+        this allows multiple providers of a function to be available, so that related units can look for any
+        provider of the common aliased name.
+    :attr wanted_by: The WantedBy= directive is the most common way to specify how a unit should be enabled. This directive allows
+        you to specify a dependency relationship in a similar way to the Wants= directive does in the [Unit] section.
+        The difference is that this directive is included in the ancillary unit allowing the primary unit listed to
+        remain relatively clean. When a unit with this directive is enabled, a directory will be created within
+        /etc/systemd/system named after the specified unit with .wants appended to the end. Within this, a symbolic
+        link to the current unit will be created, creating the dependency. For instance, if the current unit has
+        WantedBy=multi-user.target, a directory called multi-user.target.wants will be created within
+        /etc/systemd/system (if not already available) and a symbolic link to the current unit will be placed
+        within. Disabling this unit removes the link and removes the dependency relationship.
+    :attr required_by: This directive is very similar to the WantedBy= directive, but instead specifies a required dependency that
+        will cause the activation to fail if not met. When enabled, a unit with this directive will create a directory
+        ending with .requires.
+    """
+    string[]? alias = null
+    string[] wanted_by = []
+    string[] required_by = []
+end
+
+
+implementation file_content for files::SystemdUnitFile:
+    """
+    Resolve the content of the unit file, generate it from a jinja template.
+    """
+    # Define a variable that can be accessed in the template
+    unit_file = self
+
+    # Load the content based on the template
+    self.content = std::template("files/systemd_unit.j2")
+end
+
+
+implement Unit using std::none
+implement Service using std::none
+implement Install using std::none
+implement files::SystemdUnitFile using file_content
