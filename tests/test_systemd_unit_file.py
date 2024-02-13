@@ -15,6 +15,7 @@
 
     Contact: edvgui@gmail.com
 """
+
 import os
 import pathlib
 
@@ -106,7 +107,7 @@ def test_model(
                 wanted_by=["default.target"],
             ),
         )
-    """
+    """  # noqa: E501
 
     project.compile(model.strip("\n"), no_dedent=False)
 

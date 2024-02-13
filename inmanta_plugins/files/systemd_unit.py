@@ -37,11 +37,15 @@ class SystemdUnitFileResource(inmanta_plugins.files.base.BaseFileResource):
 
 
 @inmanta.agent.handler.provider("files::SystemdUnitFile", "")
-class SystemdUnitFileHandler(inmanta_plugins.files.base.BaseFileHandler[SystemdUnitFileResource]):
+class SystemdUnitFileHandler(
+    inmanta_plugins.files.base.BaseFileHandler[SystemdUnitFileResource]
+):
     _io: inmanta.agent.io.local.LocalIO
 
     def read_resource(
-        self, ctx: inmanta.agent.handler.HandlerContext, resource: SystemdUnitFileResource
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: SystemdUnitFileResource,
     ) -> None:
         super().read_resource(ctx, resource)
 
@@ -50,7 +54,9 @@ class SystemdUnitFileHandler(inmanta_plugins.files.base.BaseFileHandler[SystemdU
         ctx.debug("Reading existing file", content=resource.content)
 
     def create_resource(
-        self, ctx: inmanta.agent.handler.HandlerContext, resource: SystemdUnitFileResource
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: SystemdUnitFileResource,
     ) -> None:
         self._io.put(resource.path, resource.content.encode())
         super().create_resource(ctx, resource)
