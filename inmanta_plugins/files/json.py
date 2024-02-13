@@ -173,4 +173,4 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             raw_content = json.dumps(changes["content"]["desired"], indent=indent)
             self._io.put(resource.path, raw_content.encode())
 
-        super().update_resource(ctx, resource)
+        super().update_resource(ctx, changes, resource)

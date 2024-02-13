@@ -54,11 +54,6 @@ class BaseFileHandler(inmanta.agent.handler.CRUDHandlerGeneric[X]):
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
     ) -> None:
         self._io.chmod(resource.path, str(resource.permissions))
-
-        import logging
-
-        logging.error(self._io.file_stat(resource.path))
-
         self._io.chown(resource.path, resource.owner, resource.group)
         ctx.set_created()
 

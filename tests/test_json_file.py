@@ -16,6 +16,7 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
+import grp
 import json
 import os
 import pathlib
@@ -37,6 +38,7 @@ def test_model(
     project: pytest_inmanta.plugin.Project, file_path: pathlib.Path, purged: bool
 ) -> None:
     user = os.getlogin()
+    group = grp.getgrgid(os.getgid()).gr_name
     model = f"""
         import files
         import files::json
@@ -52,7 +54,7 @@ def test_model(
             host=host,
             path={repr(str(file_path))},
             owner={repr(user)},
-            group={repr(user)},
+            group={repr(group)},
             purged={str(purged).lower()},
             values=[
                 files::json::Object(

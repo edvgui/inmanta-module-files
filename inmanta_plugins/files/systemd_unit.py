@@ -70,4 +70,4 @@ class SystemdUnitFileHandler(
         if "content" in changes:
             self._io.put(resource.path, resource.content.encode())
 
-        super().update_resource(ctx, resource)
+        super().update_resource(ctx, changes, resource)
