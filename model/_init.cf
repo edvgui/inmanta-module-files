@@ -34,14 +34,17 @@ entity BaseFile extends std::PurgeableResource, std::ManagedResource:
     Base entity representing a file on a host.
 
     :attr path: The path where the file should be managed.
-    :attr permissions: The permissions to set on the file.
-    :attr owner: The name of the user owning of the file.
-    :attr group: The name of the group owning the file.
+    :attr permissions: The permissions to set on the file
+        (null if you don't want to manage this).
+    :attr owner: The name of the user owning of the file
+        (null if you don't want to manage this).
+    :attr group: The name of the group owning the file
+        (null if you don't want to manage this).
     """
     string path
-    int permissions = 744
-    string owner
-    string group
+    int? permissions = 744
+    string? owner
+    string? group
 end
 BaseFile.host [1] -- std::Host
 """
