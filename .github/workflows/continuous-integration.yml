@@ -46,4 +46,4 @@ jobs:
       - name: Run tests
         run: |
           echo $UID > /proc/self/loginuid
-          pytest tests -vvv --log-cli-level debug
+          venv/bin/pytest tests -vvv --log-cli-level debug
