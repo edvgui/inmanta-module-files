@@ -6,28 +6,44 @@ on:
     - cron:  '0 5 * * *'
 
 jobs:
-  tests:
+  linting:
 
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.11
           architecture: 'x64'
-      - name: Install dependencies
+      - name: Install module and its dependencies
         run: |
-          make install
-          pip list | grep inmanta
+          python3.11 -m venv venv
+          venv/bin/pip install -U pip -r requirements.dev.txt -e . -c requirements.txt
+          venv/bin/pip list | grep inmanta
       - name: Lint with flake8
         run: |
-          flake8 tests inmanta_plugins
+          venv/bin/flake8 tests inmanta_plugins
+          venv/bin/pyupgrade --py39-plus $(find inmanta_plugins tests -type f -name '*.py')
+
+  tests:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+          architecture: 'x64'
+      - name: Install module and its dependencies
+        run: |
+          python3.11 -m venv venv
+          venv/bin/pip install -U pip -r requirements.dev.txt -e . -c requirements.txt
+          venv/bin/pip list | grep inmanta
       - name: Run tests
         run: |
           echo $UID > /proc/self/loginuid
-          pytest tests -vvv --log-cli-level debug
+          venv/bin/pytest tests -vvv --log-cli-level debug

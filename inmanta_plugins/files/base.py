@@ -30,9 +30,9 @@ import inmanta.resources
 class BaseFileResource(inmanta.resources.PurgeableResource):
     fields = ("path", "permissions", "owner", "group")
     path: str
-    permissions: int
-    owner: str
-    group: str
+    permissions: typing.Optional[int]
+    owner: typing.Optional[str]
+    group: typing.Optional[str]
 
 
 X = typing.TypeVar("X", bound=BaseFileResource)
@@ -48,13 +48,18 @@ class BaseFileHandler(inmanta.agent.handler.CRUDHandlerGeneric[X]):
             raise inmanta.agent.handler.ResourcePurged()
 
         for key, value in self._io.file_stat(resource.path).items():
-            setattr(resource, key, value)
+            if getattr(resource, key) is not None:
+                setattr(resource, key, value)
 
     def create_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
     ) -> None:
-        self._io.chmod(resource.path, str(resource.permissions))
-        self._io.chown(resource.path, resource.owner, resource.group)
+        if resource.permissions is not None:
+            self._io.chmod(resource.path, str(resource.permissions))
+
+        if resource.owner is not None or resource.group is not None:
+            self._io.chown(resource.path, resource.owner, resource.group)
+
         ctx.set_created()
 
     def update_resource(
