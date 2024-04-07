@@ -52,6 +52,20 @@ The host that this file is managed on.
 """
 
 
+entity TextFile extends BaseFile:
+    """
+    A simple text file.
+
+    :attr content: The content of the text file
+    """
+    string content
+end
+
+index TextFile(host, path)
+
+implement TextFile using std::none
+
+
 entity HostFile extends BaseFile:
     """
     A host file containing a mapping from ips to domain names.  The host file
@@ -114,3 +128,17 @@ Compose the [install] section of the file
 index SystemdUnitFile(host, path)
 
 implement SystemdUnitFile using std::none
+
+
+entity Directory extends BaseFile:
+    """
+    Create a directory on the host.
+
+    :attr create_parents: Create all the parents directory, recursively.
+    """
+    bool create_parents = false
+end
+
+index Directory(host, path)
+
+implement Directory using std::none
