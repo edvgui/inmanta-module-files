@@ -27,7 +27,9 @@ import inmanta.export
 import inmanta.resources
 
 
-class BaseFileResource(inmanta.resources.PurgeableResource):
+class BaseFileResource(
+    inmanta.resources.PurgeableResource, inmanta.resources.ManagedResource
+):
     fields = ("path", "permissions", "owner", "group")
     path: str
     permissions: typing.Optional[int]
