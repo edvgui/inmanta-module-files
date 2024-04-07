@@ -1,8 +1,9 @@
 # Changelog
 
-## v0.2.0 - ?
+## v0.2.0 - 2024-04-07
 
 - Add files::Directory and files::TextFile resources
+- Fixed UnmanagedResource support
 
 ## v0.1.1 - 2024-03-10
 
