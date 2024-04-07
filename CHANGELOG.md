@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.1.2 - ?
+## v0.2.0 - ?
 
+- Add files::Directory and files::TextFile resources
 
 ## v0.1.1 - 2024-03-10
 
