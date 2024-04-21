@@ -28,6 +28,8 @@ same semantic.
 cf. https://datatracker.ietf.org/doc/html/rfc4741#section-7.2
 """
 
+typedef json_format_t as string matching self in ["json", "yaml"]
+
 
 entity BaseFile extends std::PurgeableResource, std::ManagedResource:
     """
@@ -91,9 +93,10 @@ entity JsonFile extends BaseFile:
     more information about the usage of said values.
 
     :attr indent: The indentiation to use when writing in the file.
+    :attr format: The format the json content is supposed to be written in.
     """
     int indent = 2
-    bool send_event = true
+    json_format_t format = "json"
 end
 JsonFile.values [0:] -- files::json::Value.json_file [1]
 """

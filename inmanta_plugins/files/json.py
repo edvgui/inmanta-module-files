@@ -19,6 +19,9 @@ Contact: edvgui@gmail.com
 import copy
 import enum
 import json
+import typing
+
+import yaml
 
 import inmanta.agent.agent
 import inmanta.agent.handler
@@ -82,9 +85,11 @@ def update(
 class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
     fields = (
         "indent",
+        "format",
         "values",
     )
     values: list[dict]
+    format: typing.Literal["json", "yaml"]
     indent: int
 
     @classmethod
@@ -103,6 +108,42 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
 class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResource]):
     _io: inmanta.agent.io.local.LocalIO
 
+    def from_json(self, raw: str, *, format: typing.Literal["json", "yaml"]) -> object:
+        """
+        Convert a json-like raw string in the expected format to the corresponding
+        python dict-like object.
+
+        :param raw: The raw value, as read in the file.
+        :param format: The format of the value.
+        """
+        if format == "json":
+            return json.loads(raw)
+        if format == "yaml":
+            return yaml.safe_load(raw)
+        raise ValueError(f"Unsupported format: {format}")
+
+    def to_json(
+        self,
+        value: object,
+        *,
+        format: typing.Literal["json", "yaml"],
+        indent: typing.Optional[int] = None,
+    ) -> str:
+        """
+        Dump a dict-like structure into a json-like string.  The string can
+        be in different formats, depending on the value specified.
+
+        :param value: The dict-like value, to be written to file.
+        :param format: The format of the value.
+        :param indent: Whether any indentation should be applied to the
+            value written to file.
+        """
+        if format == "json":
+            return json.dumps(value, indent=indent)
+        if format == "yaml":
+            return yaml.safe_dump(value, indent=indent)
+        raise ValueError(f"Unsupported format: {format}")
+
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: JsonFileResource
     ) -> None:
@@ -111,7 +152,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # Load the content of the existing file
         raw_content = self._io.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
-        ctx.set("current_content", json.loads(raw_content))
+        ctx.set("current_content", self.from_json(raw_content, format=resource.format))
 
     def calculate_diff(
         self,
@@ -158,7 +199,11 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             )
 
         indent = resource.indent if resource.indent != 0 else None
-        raw_content = json.dumps(content, indent=indent)
+        raw_content = self.to_json(
+            content,
+            format=resource.format,
+            indent=indent,
+        )
         self._io.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
 
@@ -170,7 +215,11 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
     ) -> None:
         if "content" in changes:
             indent = resource.indent if resource.indent != 0 else None
-            raw_content = json.dumps(changes["content"]["desired"], indent=indent)
+            raw_content = self.to_json(
+                changes["content"]["desired"],
+                format=resource.format,
+                indent=indent,
+            )
             self._io.put(resource.path, raw_content.encode())
 
         super().update_resource(ctx, changes, resource)
