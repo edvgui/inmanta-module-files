@@ -108,7 +108,14 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
 class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResource]):
     _io: inmanta.agent.io.local.LocalIO
 
-    def from_json(self, raw: str, format: typing.Literal["json", "yaml"]) -> object:
+    def from_json(self, raw: str, *, format: typing.Literal["json", "yaml"]) -> object:
+        """
+        Convert a json-like raw string in the expected format to the corresponding
+        python dict-like object.
+
+        :param raw: The raw value, as read in the file.
+        :param format: The format of the value.
+        """
         if format == "json":
             return json.loads(raw)
         if format == "yaml":
@@ -118,9 +125,19 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
     def to_json(
         self,
         value: object,
+        *,
         format: typing.Literal["json", "yaml"],
         indent: typing.Optional[int] = None,
     ) -> str:
+        """
+        Dump a dict-like structure into a json-like string.  The string can
+        be in different formats, depending on the value specified.
+
+        :param value: The dict-like value, to be written to file.
+        :param format: The format of the value.
+        :param indent: Whether any indentation should be applied to the
+            value written to file.
+        """
         if format == "json":
             return json.dumps(value, indent=indent)
         if format == "yaml":
