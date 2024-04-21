@@ -2,6 +2,7 @@
 
 ## v0.2.1 - ?
 
+- Default send_event=true for all resources
 - Improve recursive dict creation, keep new folder's parents stats
 
 ## v0.2.0 - 2024-04-07
