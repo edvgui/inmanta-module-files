@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.1 - ?
+## v0.2.1 - 2024-04-21
 
 - Default send_event=true for all resources
 - Improve recursive dict creation, keep new folder's parents stats
