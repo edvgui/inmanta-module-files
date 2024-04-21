@@ -152,7 +152,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # Load the content of the existing file
         raw_content = self._io.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
-        ctx.set("current_content", self.from_json(raw_content, resource.format))
+        ctx.set("current_content", self.from_json(raw_content, format=resource.format))
 
     def calculate_diff(
         self,
@@ -199,7 +199,11 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             )
 
         indent = resource.indent if resource.indent != 0 else None
-        raw_content = self.to_json(content, resource.format, indent=indent)
+        raw_content = self.to_json(
+            content,
+            format=resource.format,
+            indent=indent,
+        )
         self._io.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
 
@@ -212,7 +216,9 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         if "content" in changes:
             indent = resource.indent if resource.indent != 0 else None
             raw_content = self.to_json(
-                changes["content"]["desired"], resource.format, indent=indent
+                changes["content"]["desired"],
+                format=resource.format,
+                indent=indent,
             )
             self._io.put(resource.path, raw_content.encode())
 
