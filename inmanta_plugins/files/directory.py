@@ -16,6 +16,8 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
+import pathlib
+
 import inmanta.agent.agent
 import inmanta.agent.handler
 import inmanta.agent.io.local
@@ -49,12 +51,29 @@ class DirectoryHandler(inmanta_plugins.files.base.BaseFileHandler[DirectoryResou
     def create_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: DirectoryResource
     ) -> None:
-        if not resource.create_parents:
-            # Call the basic io mkdir helper
-            self._io.mkdir(resource.path)
-        else:
-            # Call the mkdir command on the host in a subprocess
-            self._io.run("mkdir", ["-p", resource.path], timeout=10)
+        if resource.create_parents:
+            # Create all parent directories, with the owner, group and permissions of
+            # their parents
+            parent_owner = "root"
+            parent_group = "root"
+            parent_permissions = "555"
+            for parent in reversed(pathlib.Path(resource.path).parents):
+                if not self._io.file_exists(str(parent)):
+                    # Create the parent directory, and make sure it has the
+                    # right owner and permissions
+                    self._io.mkdir(str(parent))
+                    self._io.chmod(str(parent), parent_permissions)
+                    self._io.chown(str(parent), parent_owner, parent_group)
+                    continue
+
+                # Read the existing folder permissions, and save it for the next child folder
+                stat = self._io.file_stat(str(parent))
+                parent_owner = stat["owner"]
+                parent_group = stat["group"]
+                parent_permissions = str(stat["permissions"])
+
+        # Call the basic io mkdir helper
+        self._io.mkdir(resource.path)
 
         super().create_resource(ctx, resource)
 

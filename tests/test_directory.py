@@ -67,9 +67,13 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
 
     # Create the dir (recursively)
     test_model(project, dir / "in/dir", purged=False, create_parents=True)
+    assert not (dir / "in").exists()
     assert project.dryrun_resource("files::Directory")
     project.deploy_resource("files::Directory")
     assert (dir / "in/dir").is_dir()
+    assert (dir / "in").owner() == dir.owner()
+    assert (dir / "in").group() == dir.group()
+    assert (dir / "in").stat().st_mode == dir.stat().st_mode
     assert not project.dryrun_resource("files::Directory")
 
     # Delete the dir
