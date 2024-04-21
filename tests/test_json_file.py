@@ -21,21 +21,14 @@ import json
 import os
 import pathlib
 
-import pytest
 import pytest_inmanta.plugin
 
 
-@pytest.mark.parametrize(
-    (
-        "file_path",
-        "purged",
-    ),
-    [
-        (pathlib.Path("/tmp/example"), False),
-    ],
-)
 def test_model(
-    project: pytest_inmanta.plugin.Project, file_path: pathlib.Path, purged: bool
+    project: pytest_inmanta.plugin.Project,
+    file_path: pathlib.Path = pathlib.Path("/tmp/example"),
+    purged: bool = False,
+    format: str = "json",
 ) -> None:
     user = os.getlogin()
     group = grp.getgrgid(os.getgid()).gr_name
@@ -56,6 +49,7 @@ def test_model(
             owner={repr(user)},
             group={repr(group)},
             purged={str(purged).lower()},
+            format={repr(format)},
             values=[
                 files::json::Object(
                     path="people[name=bob]",
@@ -120,3 +114,9 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     project.deploy_resource("files::JsonFile")
     assert not project.dryrun_resource("files::JsonFile")
     assert not file.exists()
+
+    # Create the file as a yaml
+    test_model(project, file, purged=False, format="yaml")
+    assert project.dryrun_resource("files::JsonFile")
+    project.deploy_resource("files::JsonFile")
+    assert not project.dryrun_resource("files::JsonFile")
