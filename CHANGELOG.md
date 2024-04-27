@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 - ?
+## v0.3.0 - 2024-04-28
 
 - Add support for managing yaml files
 
