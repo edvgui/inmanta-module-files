@@ -77,6 +77,23 @@ PIDFile={{ unit_file.service.pid_file }}
 
 {% endif -%}
 
+{% if unit_file.timer is defined -%}
+[Timer]
+{%- if unit_file.timer.on_calendar is not none %}
+OnCalendar={{ unit_file.timer.on_calendar }}
+{%- endif %}
+{%- if unit_file.timer.accuracy_sec is not none %}
+AccuracySec={{ unit_file.timer.accuracy_sec }}
+{%- endif %}
+{%- if unit_file.timer.randomized_delay_sec is not none %}
+RandomizedDelaySec={{ unit_file.timer.randomized_delay_sec }}
+{%- endif %}
+{%- if unit_file.timer.unit is not none %}
+Unit={{ unit_file.timer.unit }}
+{%- endif %}
+
+{% endif -%}
+
 {%- if unit_file.install is defined -%}
 [Install]
 {%- if unit_file.install.alias is not none %}

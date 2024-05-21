@@ -129,6 +129,11 @@ SystemdUnitFile.install [0:1] -- files::systemd_unit::Install
 Compose the [install] section of the file
 """
 
+SystemdUnitFile.timer [0:1] -- files::systemd_unit::Timer
+"""
+Compose the [timer] section of the file
+"""
+
 index SystemdUnitFile(host, path)
 
 implement SystemdUnitFile using std::none
