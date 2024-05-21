@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.3.1 - ?
+## v0.4.0 - ?
 
+- Add support for timer unit files
 
 ## v0.3.0 - 2024-04-28
 
