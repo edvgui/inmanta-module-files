@@ -19,7 +19,7 @@ import std
 import files
 
 
-typedef service_type_t as string matching self in ["simple", "forking", "oneshot", "dbus", "notify", "idle"]
+typedef service_type_t as string matching self in ["simple", "forking", "oneshot", "dbus", "notify", "idle", "exec"]
 """
 One of the basic things that should be specified within the [Service] section is the Type= of the service.
 This categorizes services by their process and daemonizing behavior. This is important because it tells
@@ -42,7 +42,8 @@ The Type= directive can be one of the following:
     notify: This indicates that the service will issue a notification when it has finished starting up.
         The systemd process will wait for this to happen before proceeding to other units.
     idle: This indicates that the service will not be run until all jobs are dispatched.
-
+    exec: The exec type is similar to simple, but the service manager will consider the unit started
+        immediately after the main service binary has been executed. 
 """
 
 
@@ -203,5 +204,6 @@ end
 
 implement Unit using std::none
 implement Service using std::none
+implement Timer using std::none
 implement Install using std::none
 implement files::SystemdUnitFile using file_content
