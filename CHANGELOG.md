@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.4.1 - ?
+## v0.5.0 - ?
 
+- Add files::Symlink resource
 
 ## v0.4.0 - 2024-05-25
 
