@@ -151,3 +151,17 @@ end
 index Directory(host, path)
 
 implement Directory using std::none
+
+
+entity Symlink extends BaseFile:
+    """
+    Create a directory on the host.
+
+    :attr target: The path on the file system that the symlink should point to.
+    """
+    string target
+end
+
+index Symlink(host, path)
+
+implement Symlink using std::none
