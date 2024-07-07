@@ -160,8 +160,18 @@ entity Symlink extends BaseFile:
     :attr target: The path on the file system that the symlink should point to.
     """
     string target
+    int? permissions = null
 end
 
 index Symlink(host, path)
 
-implement Symlink using std::none
+implement Symlink using symlink_permissions
+
+
+implementation symlink_permissions for Symlink:
+    """
+    Make sure that we do not attempt to manage the permissions of
+    the symlink, as it is not supported by the handler.
+    """
+    self.permissions = null
+end

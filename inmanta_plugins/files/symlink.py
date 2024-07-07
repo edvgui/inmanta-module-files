@@ -41,18 +41,44 @@ class SymlinkResource(inmanta_plugins.files.base.BaseFileResource):
 class SymlinkHandler(inmanta_plugins.files.base.BaseFileHandler[SymlinkResource]):
     _io: inmanta.agent.io.local.LocalIO
 
+    def chown_symlink(self, path: str, owner: str, group: str) -> None:
+        """
+        Perform the chown operation on a symlink, it requires an extra argument
+        to prevent chown from resolving the symlink itself and changing the
+        permissions of the target file.
+        """
+        self._io.run(
+            "chown",
+            [
+                "--no-dereference",
+                f"{owner}:{group}",
+                path,
+            ],
+        )
+
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: SymlinkResource
     ) -> None:
         super().read_resource(ctx, resource)
 
+        if not self._io.is_symlink(resource.path):
+            raise Exception(
+                "The target of resource %s already exists but is not a symlink."
+                % resource
+            )
+
+        resource.target = self._io.readlink(resource.path)
+
     def create_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: SymlinkResource
     ) -> None:
-        # Call the basic io mkdir helper
+        # Call the basic io symlink helper
         self._io.symlink(resource.target, resource.path)
 
-        super().create_resource(ctx, resource)
+        if resource.owner is not None or resource.group is not None:
+            self.chown_symlink(resource.path, resource.owner, resource.group)
+
+        ctx.set_created()
 
     def update_resource(
         self,
@@ -60,7 +86,14 @@ class SymlinkHandler(inmanta_plugins.files.base.BaseFileHandler[SymlinkResource]
         changes: dict[str, dict[str, object]],
         resource: SymlinkResource,
     ) -> None:
-        super().update_resource(ctx, changes, resource)
+        if "target" in changes:
+            self._io.remove(resource.path)
+            self._io.symlink(resource.target, resource.path)
+
+        if "owner" in changes or "group" in changes:
+            self.chown_symlink(resource.path, resource.owner, resource.group)
+
+        ctx.set_updated()
 
     def delete_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: SymlinkResource
