@@ -157,8 +157,45 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             return yaml.safe_dump(value, indent=indent)
         raise ValueError(f"Unsupported format: {format}")
 
+    def extract_facts(
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: JsonFileResource,
+        *,
+        content: dict,
+    ) -> dict[str, object]:
+        # Read facts based on the content of the file
+        return {
+            str(path): {
+                str(k): dict_path.to_path(str(k)).get_element(content)
+                for k in path.resolve_wild_cards(content)
+            }
+            for desired_value in resource.discovered_values
+            if (path := dict_path.to_wild_path(desired_value["path"]))
+        }
+
+    def facts(
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: JsonFileResource,
+    ) -> dict[str, object]:
+        try:
+            # Delegate to read_resource to get the content of
+            # the file
+            self.read_resource(ctx, resource)
+        except inmanta.agent.handler.ResourcePurged():
+            return {}
+
+        return self.extract_facts(
+            ctx,
+            resource,
+            content=ctx.get("current_content"),
+        )
+
     def read_resource(
-        self, ctx: inmanta.agent.handler.HandlerContext, resource: JsonFileResource
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: JsonFileResource,
     ) -> None:
         super().read_resource(ctx, resource)
 
@@ -168,27 +205,9 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         current_content = self.from_json(raw_content, format=resource.format)
         ctx.set("current_content", current_content)
 
-        # Build up the desired content of the file
-        desired_content = copy.deepcopy(current_content)
-        for value in resource.values:
-            update(
-                desired_content,
-                dict_path.to_path(value["path"]),
-                Operation(value["operation"]),
-                value["value"],
-            )
-        ctx.set("desired_content", desired_content)
-
-        # Read facts based on the desired content of the file
-        for desired_value in resource.desired_values:
-            path = dict_path.to_wild_path(desired_value["path"])
-            ctx.set_fact(
-                str(path),
-                {
-                    str(k): dict_path.to_path(str(k)).get_element(desired_content)
-                    for k in path.resolve_wild_cards(desired_content)
-                },
-            )
+        # Set the facts after read
+        for k, v in self.extract_facts(ctx, resource, content=current_content).items():
+            ctx.set_fact(k, v)
 
     def calculate_diff(
         self,
@@ -203,7 +222,14 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # operation: We apply our desired state to the current state, and check if we can then
         # see any difference.
         current_content = ctx.get("current_content")
-        desired_content = ctx.get("desired_content")
+        desired_content = copy.deepcopy(current_content)
+        for value in desired.values:
+            update(
+                desired_content,
+                dict_path.to_path(value["path"]),
+                Operation(value["operation"]),
+                value["value"],
+            )
 
         if current_content != desired_content:
             changes["content"] = {
@@ -214,7 +240,9 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         return changes
 
     def create_resource(
-        self, ctx: inmanta.agent.handler.HandlerContext, resource: JsonFileResource
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        resource: JsonFileResource,
     ) -> None:
         # Build a config based on all the elements we want to manage
         content = {}
@@ -235,6 +263,10 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         self._io.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
 
+        # Set the facts after creation
+        for k, v in self.extract_facts(ctx, resource, content=content).items():
+            ctx.set_fact(k, v)
+
     def update_resource(
         self,
         ctx: inmanta.agent.handler.HandlerContext,
@@ -242,12 +274,17 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         resource: JsonFileResource,
     ) -> None:
         if "content" in changes:
+            content = changes["content"]["desired"]
             indent = resource.indent if resource.indent != 0 else None
             raw_content = self.to_json(
-                changes["content"]["desired"],
+                content,
                 format=resource.format,
                 indent=indent,
             )
             self._io.put(resource.path, raw_content.encode())
+
+            # Set the facts after update
+            for k, v in self.extract_facts(ctx, resource, content=content).items():
+                ctx.set_fact(k, v)
 
         super().update_resource(ctx, changes, resource)
