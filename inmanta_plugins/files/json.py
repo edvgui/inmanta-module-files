@@ -87,8 +87,10 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
         "indent",
         "format",
         "values",
+        "discovered_values",
     )
     values: list[dict]
+    discovered_values: list[dict]
     format: typing.Literal["json", "yaml"]
     indent: int
 
@@ -101,6 +103,17 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
                 "value": value.value,
             }
             for value in entity.values
+        ]
+
+    @classmethod
+    def get_discovered_values(
+        cls, _, entity: inmanta.execute.proxy.DynamicProxy
+    ) -> list[dict]:
+        return [
+            {
+                "path": value.path,
+            }
+            for value in entity.discovered_values
         ]
 
 
@@ -152,7 +165,30 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # Load the content of the existing file
         raw_content = self._io.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
-        ctx.set("current_content", self.from_json(raw_content, format=resource.format))
+        current_content = self.from_json(raw_content, format=resource.format)
+        ctx.set("current_content", current_content)
+
+        # Build up the desired content of the file
+        desired_content = copy.deepcopy(current_content)
+        for value in resource.values:
+            update(
+                desired_content,
+                dict_path.to_path(value["path"]),
+                Operation(value["operation"]),
+                value["value"],
+            )
+        ctx.set("desired_content", desired_content)
+
+        # Read facts based on the desired content of the file
+        for desired_value in resource.desired_values:
+            path = dict_path.to_wild_path(desired_value["path"])
+            ctx.set_fact(
+                str(path),
+                {
+                    str(k): dict_path.to_path(str(k)).get_element(desired_content)
+                    for k in path.resolve_wild_cards(desired_content)
+                },
+            )
 
     def calculate_diff(
         self,
@@ -167,15 +203,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # operation: We apply our desired state to the current state, and check if we can then
         # see any difference.
         current_content = ctx.get("current_content")
-        desired_content = copy.deepcopy(current_content)
-
-        for value in desired.values:
-            update(
-                desired_content,
-                dict_path.to_path(value["path"]),
-                Operation(value["operation"]),
-                value["value"],
-            )
+        desired_content = ctx.get("desired_content")
 
         if current_content != desired_content:
             changes["content"] = {
