@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.5.3 - ?
+## v0.6.0 - ?
 
+- Add discovery values to JsonFile resource
 
 ## v0.5.2 - 2024-07-07
 

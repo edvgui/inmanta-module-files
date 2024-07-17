@@ -48,3 +48,29 @@ entity Object extends Value:
 end
 
 implement Object using std::none
+
+
+entity DiscoveredValue:
+    """
+    Define a (wild) path that should be used to discover all the values
+    it points to.  The discovered values will be assigned to the values dict,
+    each key being the path that points to the value it is mapped to.
+
+    :param path: The wild path to use to discover values
+    :param values: The discovered values, as a mapping of the path of the value
+        to the value itself.
+    """
+    string path
+    dict values
+end
+
+index DiscoveredValue(json_file, path)
+
+implementation get_values for DiscoveredValue:
+    """
+    Get the discovered values from facts.
+    """
+    self.values = std::getfact(self.json_file, self.path)
+end
+
+implement DiscoveredValue using get_values
