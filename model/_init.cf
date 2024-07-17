@@ -103,6 +103,11 @@ JsonFile.values [0:] -- files::json::Value.json_file [1]
 The set of values that will be enforced in the file.
 """
 
+JsonFile.discovered_values [0:] -- files::json::DiscoveredValue.json_file [1]
+"""
+The set of values that should be discovered within the file.
+"""
+
 index JsonFile(host, path)
 
 implement JsonFile using std::none
