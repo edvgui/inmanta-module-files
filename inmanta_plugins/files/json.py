@@ -215,13 +215,6 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         current_content = self.from_json(raw_content, format=resource.format)
         ctx.set("current_content", current_content)
 
-        # Set the facts after read if it is a dryrun
-        if ctx.is_dry_run():
-            for k, v in self.extract_facts(
-                ctx, resource, content=current_content
-            ).items():
-                ctx.set_fact(k, v)
-
     def calculate_diff(
         self,
         ctx: inmanta.agent.handler.HandlerContext,
@@ -249,6 +242,16 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 "current": current_content,
                 "desired": desired_content,
             }
+
+        # Set the facts now if it is a dryrun or if there is
+        # no changes
+        if not changes or ctx.is_dry_run():
+            for k, v in self.extract_facts(
+                ctx,
+                desired,
+                content=current_content,
+            ).items():
+                ctx.set_fact(k, v)
 
         return changes
 
