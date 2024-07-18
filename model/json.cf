@@ -70,7 +70,7 @@ implementation get_values for DiscoveredValue:
     """
     Get the discovered values from facts.
     """
-    self.values = std::getfact(self.json_file, self.path)
+    self.values = json_loads(std::getfact(self.json_file, self.path))
 end
 
 implement DiscoveredValue using get_values

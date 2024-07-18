@@ -163,11 +163,11 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         resource: JsonFileResource,
         *,
         content: dict,
-    ) -> dict[str, object]:
+    ) -> dict[str, str]:
         # Read facts based on the content of the file
         return {
             str(path): {
-                str(k): dict_path.to_path(str(k)).get_element(content)
+                str(k): json.dumps(dict_path.to_path(str(k)).get_element(content))
                 for k in path.resolve_wild_cards(content)
             }
             for desired_value in resource.discovered_values
