@@ -15,15 +15,3 @@ limitations under the License.
 
 Contact: edvgui@gmail.com
 """
-
-import json
-
-import inmanta.plugins
-
-
-@inmanta.plugins.plugin()
-def json_loads(s: "string") -> "any":  # type: ignore
-    """
-    Load the given json string and return the deserialized object.
-    """
-    return json.loads(s)

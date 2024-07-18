@@ -34,6 +34,14 @@ import inmanta_plugins.files.base
 from inmanta.util import dict_path
 
 
+@inmanta.plugins.plugin()
+def json_loads(s: "string") -> "any":  # type: ignore
+    """
+    Load the given json string and return the deserialized object.
+    """
+    return json.loads(s)
+
+
 class Operation(str, enum.Enum):
     REPLACE = "replace"
     REMOVE = "remove"
@@ -166,10 +174,12 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
     ) -> dict[str, str]:
         # Read facts based on the content of the file
         return {
-            str(path): {
-                str(k): json.dumps(dict_path.to_path(str(k)).get_element(content))
-                for k in path.resolve_wild_cards(content)
-            }
+            str(path): json.dumps(
+                {
+                    str(k): dict_path.to_path(str(k)).get_element(content)
+                    for k in path.resolve_wild_cards(content)
+                }
+            )
             for desired_value in resource.discovered_values
             if (path := dict_path.to_wild_path(desired_value["path"]))
         }
