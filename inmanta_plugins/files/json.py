@@ -21,6 +21,7 @@ import enum
 import json
 import typing
 
+import inmanta_plugins.std
 import yaml
 
 import inmanta.agent.agent
@@ -28,18 +29,58 @@ import inmanta.agent.handler
 import inmanta.agent.io.local
 import inmanta.const
 import inmanta.execute.proxy
+import inmanta.execute.util
 import inmanta.export
+import inmanta.plugins
 import inmanta.resources
 import inmanta_plugins.files.base
 from inmanta.util import dict_path
 
 
 @inmanta.plugins.plugin()
-def json_loads(s: "string") -> "any":  # type: ignore
+def get_json_fact(
+    context: inmanta.plugins.Context,
+    resource: "std::Resource",  # type: ignore
+    fact_name: "string",  # type: ignore
+    *,
+    default_value: "any" = None,  # type: ignore
+    soft_fail: "bool" = False,  # type: ignore
+) -> "any":  # type: ignore
     """
-    Load the given json string and return the deserialized object.
+    Get a value from fact that is expected to be a json-serialized payload.
+    Deserialize the value and return it.
+    If soft_fail is True and the value is not a valid json, return Unknown instead.
+
+    :param resource: The resource that should provide the fact
+    :param fact_name: The name of the fact provided by the resource
+    :param default_value: A default value to return if the fact is not set yet
+    :param soft_fail: Whether to suppress json decoding error and return Unknown instead.
     """
-    return json.loads(s)
+    # Get the fact using std logic
+    fact = inmanta_plugins.std.getfact(
+        context,
+        resource,
+        fact_name,
+    )
+
+    # If the fact is unknown and we have a default, we return the default
+    # instead
+    if inmanta_plugins.std.is_unknown(fact) and default_value is not None:
+        return default_value
+
+    # If the fact is unknown, we return it as is
+    if inmanta_plugins.std.is_unknown(fact):
+        return fact
+
+    # Try to decode the json
+    try:
+        return json.loads(fact)
+    except json.JSONDecodeError:
+        if soft_fail:
+            # Return unknown instead
+            return inmanta.execute.util.Unknown(source=resource)
+
+        raise
 
 
 class Operation(str, enum.Enum):
