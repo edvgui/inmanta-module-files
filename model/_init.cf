@@ -16,6 +16,7 @@
     Contact: edvgui@gmail.com
 """
 import std
+import mitogen
 import files::host
 import files::json
 import files::systemd_unit
@@ -52,6 +53,11 @@ end
 BaseFile.host [1] -- std::Host
 """
 The host that this file is managed on.
+"""
+
+BaseFile.via [0:1] -- mitogen::Context
+"""
+Dedicated mitogen context for this file.
 """
 
 

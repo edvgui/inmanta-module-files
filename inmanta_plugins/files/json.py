@@ -168,8 +168,6 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
 
 @inmanta.agent.handler.provider("files::JsonFile", "")
 class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResource]):
-    _io: inmanta.agent.io.local.LocalIO
-
     def from_json(self, raw: str, *, format: typing.Literal["json", "yaml"]) -> object:
         """
         Convert a json-like raw string in the expected format to the corresponding
@@ -251,7 +249,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         super().read_resource(ctx, resource)
 
         # Load the content of the existing file
-        raw_content = self._io.read_binary(resource.path).decode()
+        raw_content = self.proxy.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
         current_content = self.from_json(raw_content, format=resource.format)
         ctx.set("current_content", current_content)
@@ -317,7 +315,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             format=resource.format,
             indent=indent,
         )
-        self._io.put(resource.path, raw_content.encode())
+        self.proxy.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
 
         # Set the facts after creation
@@ -338,7 +336,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 format=resource.format,
                 indent=indent,
             )
-            self._io.put(resource.path, raw_content.encode())
+            self.proxy.put(resource.path, raw_content.encode())
 
             # Set the facts after update
             for k, v in self.extract_facts(ctx, resource, content=content).items():

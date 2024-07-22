@@ -132,15 +132,13 @@ class HostFileResource(inmanta_plugins.files.base.BaseFileResource):
 
 @inmanta.agent.handler.provider("files::HostFile", "")
 class HostFileHandler(inmanta_plugins.files.base.BaseFileHandler[HostFileResource]):
-    _io: inmanta.agent.io.local.LocalIO
-
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: HostFileResource
     ) -> None:
         super().read_resource(ctx, resource)
 
         # Load the content of the existing file
-        raw_content = self._io.read_binary(resource.path).decode()
+        raw_content = self.proxy.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
         ctx.set("current_content", parse_host_file(raw_content))
 
@@ -188,7 +186,7 @@ class HostFileHandler(inmanta_plugins.files.base.BaseFileHandler[HostFileResourc
                 value["value"],
             )
         raw_content = write_host_file(content)
-        self._io.put(resource.path, raw_content.encode())
+        self.proxy.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
 
     def update_resource(
@@ -199,6 +197,6 @@ class HostFileHandler(inmanta_plugins.files.base.BaseFileHandler[HostFileResourc
     ) -> None:
         if "content" in changes:
             raw_content = write_host_file(changes["content"]["desired"])
-            self._io.put(resource.path, raw_content.encode())
+            self.proxy.put(resource.path, raw_content.encode())
 
         super().update_resource(ctx, changes, resource)

@@ -41,8 +41,6 @@ class DirectoryResource(inmanta_plugins.files.base.BaseFileResource):
 
 @inmanta.agent.handler.provider("files::Directory", "")
 class DirectoryHandler(inmanta_plugins.files.base.BaseFileHandler[DirectoryResource]):
-    _io: inmanta.agent.io.local.LocalIO
-
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: DirectoryResource
     ) -> None:
@@ -58,22 +56,22 @@ class DirectoryHandler(inmanta_plugins.files.base.BaseFileHandler[DirectoryResou
             parent_group = "root"
             parent_permissions = "555"
             for parent in reversed(pathlib.Path(resource.path).parents):
-                if not self._io.file_exists(str(parent)):
+                if not self.proxy.file_exists(str(parent)):
                     # Create the parent directory, and make sure it has the
                     # right owner and permissions
-                    self._io.mkdir(str(parent))
-                    self._io.chmod(str(parent), parent_permissions)
-                    self._io.chown(str(parent), parent_owner, parent_group)
+                    self.proxy.mkdir(str(parent))
+                    self.proxy.chmod(str(parent), parent_permissions)
+                    self.proxy.chown(str(parent), parent_owner, parent_group)
                     continue
 
                 # Read the existing folder permissions, and save it for the next child folder
-                stat = self._io.file_stat(str(parent))
+                stat = self.proxy.file_stat(str(parent))
                 parent_owner = stat["owner"]
                 parent_group = stat["group"]
                 parent_permissions = str(stat["permissions"])
 
         # Call the basic io mkdir helper
-        self._io.mkdir(resource.path)
+        self.proxy.mkdir(resource.path)
 
         super().create_resource(ctx, resource)
 
@@ -88,5 +86,5 @@ class DirectoryHandler(inmanta_plugins.files.base.BaseFileHandler[DirectoryResou
     def delete_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: DirectoryResource
     ) -> None:
-        self._io.rmdir(resource.path)
+        self.proxy.rmdir(resource.path)
         ctx.set_purged()

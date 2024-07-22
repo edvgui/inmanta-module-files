@@ -25,10 +25,11 @@ import inmanta.const
 import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
+import inmanta_plugins.mitogen.abc
 
 
 class BaseFileResource(
-    inmanta.resources.PurgeableResource, inmanta.resources.ManagedResource
+    inmanta_plugins.mitogen.abc.ResourceABC, inmanta.resources.ManagedResource
 ):
     fields = ("path", "permissions", "owner", "group")
     path: str
@@ -40,16 +41,15 @@ class BaseFileResource(
 X = typing.TypeVar("X", bound=BaseFileResource)
 
 
-class BaseFileHandler(inmanta.agent.handler.CRUDHandlerGeneric[X]):
-    _io: inmanta.agent.io.local.LocalIO
+class BaseFileHandler(inmanta_plugins.mitogen.abc.HandlerABC[X]):
 
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
     ) -> None:
-        if not self._io.file_exists(resource.path):
+        if not self.proxy.file_exists(resource.path):
             raise inmanta.agent.handler.ResourcePurged()
 
-        for key, value in self._io.file_stat(resource.path).items():
+        for key, value in self.proxy.file_stat(resource.path).items():
             if getattr(resource, key) is not None:
                 setattr(resource, key, value)
 
@@ -57,10 +57,10 @@ class BaseFileHandler(inmanta.agent.handler.CRUDHandlerGeneric[X]):
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
     ) -> None:
         if resource.permissions is not None:
-            self._io.chmod(resource.path, str(resource.permissions))
+            self.proxy.chmod(resource.path, str(resource.permissions))
 
         if resource.owner is not None or resource.group is not None:
-            self._io.chown(resource.path, resource.owner, resource.group)
+            self.proxy.chown(resource.path, resource.owner, resource.group)
 
         ctx.set_created()
 
@@ -71,15 +71,15 @@ class BaseFileHandler(inmanta.agent.handler.CRUDHandlerGeneric[X]):
         resource: X,
     ) -> None:
         if "permissions" in changes:
-            self._io.chmod(resource.path, str(resource.permissions))
+            self.proxy.chmod(resource.path, str(resource.permissions))
 
         if "owner" in changes or "group" in changes:
-            self._io.chown(resource.path, resource.owner, resource.group)
+            self.proxy.chown(resource.path, resource.owner, resource.group)
 
         ctx.set_updated()
 
     def delete_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
     ) -> None:
-        self._io.remove(resource.path)
+        self.proxy.remove(resource.path)
         ctx.set_purged()
