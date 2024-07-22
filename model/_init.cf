@@ -46,8 +46,8 @@ entity BaseFile extends std::PurgeableResource, std::ManagedResource:
     """
     string path
     int? permissions = 744
-    string? owner
-    string? group
+    string? owner = null
+    string? group = null
     bool send_event = true
 end
 BaseFile.host [1] -- std::Host
