@@ -34,6 +34,7 @@ def test_model(
     user = os.getlogin()
     group = grp.getgrgid(os.getgid()).gr_name
     model = f"""
+        import mitogen
         import files
         import files::json
 
@@ -42,6 +43,7 @@ def test_model(
         host = std::Host(
             name="localhost",
             os=std::linux,
+            via=mitogen::Local(),
         )
 
         files::JsonFile(
