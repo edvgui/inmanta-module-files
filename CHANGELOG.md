@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.6.2 - ?
+## v1.0.0 - ?
 
+- Add default null value to file owner and group
 
 ## v0.6.1 - 2024-07-22
 
