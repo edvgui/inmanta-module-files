@@ -2,6 +2,7 @@
 
 ## v1.0.0 - ?
 
+- Use mitogen for handler io
 - Add default null value to file owner and group
 
 ## v0.6.1 - 2024-07-22
