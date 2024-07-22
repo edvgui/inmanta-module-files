@@ -29,6 +29,7 @@ def test_model(
     file_path: pathlib.Path = pathlib.Path("/tmp/example"),
     purged: bool = False,
     format: str = "json",
+    people_fact: str | None = None,
 ) -> None:
     user = os.getlogin()
     group = grp.getgrgid(os.getgid()).gr_name
@@ -75,83 +76,75 @@ def test_model(
         )
     """
 
+    if people_fact is not None:
+        # If the fact is set for the people, we add it to the project
+        project.add_fact(
+            f"files::JsonFile[localhost,path={file_path}]",
+            "people[name=*]",
+            people_fact,
+        )
+
     project.compile(model.strip("\n"), no_dedent=False)
+
+    if people_fact is not None:
+        # Check that the fact has been assigned in the model
+        discovered = project.get_instances("files::json::DiscoveredValue")
+        assert len(discovered) == 1
+        assert dict(discovered[0].values) == json.loads(people_fact)
 
 
 def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) -> None:
     file = tmp_path / "friends.json"
+    res_id = f"files::JsonFile[localhost,path={file}]"
+
+    def get_people_fact_value(resource_id: str) -> dict | None:
+        if project.ctx is None:
+            # No handler has run, the fact can't be set
+            return None
+
+        for fact in project.ctx.facts:
+            if fact["resource_id"] != resource_id:
+                continue
+
+            if fact["id"] != "people[name=*]":
+                continue
+
+            return json.loads(fact["value"])
+
+        # No fact matched
+        return None
 
     # Create the file
     test_model(project, file, purged=False)
     assert project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == []
+    assert get_people_fact_value(res_id) is None
     project.deploy_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+    }
     assert not project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+    }
 
     # Manually remove a managed line from the file and make sure we detect a change
     friends = json.loads(file.read_text())
     del friends["people"]
     file.write_text(json.dumps(friends))
     assert project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {},
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {}
     project.deploy_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+    }
     assert not project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+    }
 
     # Insert an extra entry in the file and me sure we don't detect any change as we don't
     # manage that entry
@@ -159,76 +152,55 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     friends["people"].append({"name": "chris"})
     file.write_text(json.dumps(friends))
     assert not project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=chris]": {"name": "chris"},
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+        "people[name=chris]": {"name": "chris"},
+    }
 
     # Add the entry that should not be there and make sure it is removed, the unmanaged
     # entry should remain untouched
     friends["people"].append({"name": "eve"})
     file.write_text(json.dumps(friends))
     assert project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=eve]": {"name": "eve"},
-                "people[name=chris]": {"name": "chris"},
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+        "people[name=chris]": {"name": "chris"},
+        "people[name=eve]": {"name": "eve"},
+    }
     project.deploy_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=chris]": {"name": "chris"},
-                "people[name=bob]": {"name": "bob", "age": 20},
-                "people[name=alice]": {"name": "alice", "age": 20},
-            },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+        "people[name=chris]": {"name": "chris"},
+    }
     assert not project.dryrun_resource("files::JsonFile")
     friends = json.loads(file.read_text())
     assert friends["people"][2] == {"name": "chris"}
     assert len(friends["people"]) == 3
 
     # Delete the file
-    test_model(project, file, purged=True)
-    assert project.dryrun_resource("files::JsonFile")
-    assert project.ctx.facts == [
-        {
-            "id": "people[name=*]",
-            "source": "fact",
-            "value": {
-                "people[name=chris]": {"name": "chris"},
+    test_model(
+        project,
+        file,
+        purged=True,
+        people_fact=json.dumps(
+            {
                 "people[name=bob]": {"name": "bob", "age": 20},
                 "people[name=alice]": {"name": "alice", "age": 20},
+                "people[name=chris]": {"name": "chris"},
             },
-            "resource_id": f"files::JsonFile[localhost,path={file}]",
-            "expires": True,
-        }
-    ]
+        ),
+    )
+    assert project.dryrun_resource("files::JsonFile")
+    assert get_people_fact_value(res_id) == {
+        "people[name=bob]": {"name": "bob", "age": 20},
+        "people[name=alice]": {"name": "alice", "age": 20},
+        "people[name=chris]": {"name": "chris"},
+    }
     project.deploy_resource("files::JsonFile")
-    assert project.ctx.facts == []
+    assert get_people_fact_value(res_id) is None
     assert not project.dryrun_resource("files::JsonFile")
     assert not file.exists()
 

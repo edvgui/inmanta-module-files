@@ -21,6 +21,7 @@ import enum
 import json
 import typing
 
+import inmanta_plugins.std
 import yaml
 
 import inmanta.agent.agent
@@ -28,10 +29,58 @@ import inmanta.agent.handler
 import inmanta.agent.io.local
 import inmanta.const
 import inmanta.execute.proxy
+import inmanta.execute.util
 import inmanta.export
+import inmanta.plugins
 import inmanta.resources
 import inmanta_plugins.files.base
 from inmanta.util import dict_path
+
+
+@inmanta.plugins.plugin()
+def get_json_fact(
+    context: inmanta.plugins.Context,
+    resource: "std::Resource",  # type: ignore
+    fact_name: "string",  # type: ignore
+    *,
+    default_value: "any" = None,  # type: ignore
+    soft_fail: "bool" = False,  # type: ignore
+) -> "any":  # type: ignore
+    """
+    Get a value from fact that is expected to be a json-serialized payload.
+    Deserialize the value and return it.
+    If soft_fail is True and the value is not a valid json, return Unknown instead.
+
+    :param resource: The resource that should provide the fact
+    :param fact_name: The name of the fact provided by the resource
+    :param default_value: A default value to return if the fact is not set yet
+    :param soft_fail: Whether to suppress json decoding error and return Unknown instead.
+    """
+    # Get the fact using std logic
+    fact = inmanta_plugins.std.getfact(
+        context,
+        resource,
+        fact_name,
+    )
+
+    # If the fact is unknown and we have a default, we return the default
+    # instead
+    if inmanta_plugins.std.is_unknown(fact) and default_value is not None:
+        return default_value
+
+    # If the fact is unknown, we return it as is
+    if inmanta_plugins.std.is_unknown(fact):
+        return fact
+
+    # Try to decode the json
+    try:
+        return json.loads(fact)
+    except json.JSONDecodeError:
+        if soft_fail:
+            # Return unknown instead
+            return inmanta.execute.util.Unknown(source=resource)
+
+        raise
 
 
 class Operation(str, enum.Enum):
@@ -163,13 +212,15 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         resource: JsonFileResource,
         *,
         content: dict,
-    ) -> dict[str, object]:
+    ) -> dict[str, str]:
         # Read facts based on the content of the file
         return {
-            str(path): {
-                str(k): dict_path.to_path(str(k)).get_element(content)
-                for k in path.resolve_wild_cards(content)
-            }
+            str(path): json.dumps(
+                {
+                    str(k): dict_path.to_path(str(k)).get_element(content)
+                    for k in path.resolve_wild_cards(content)
+                }
+            )
             for desired_value in resource.discovered_values
             if (path := dict_path.to_wild_path(desired_value["path"]))
         }
@@ -205,13 +256,6 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         current_content = self.from_json(raw_content, format=resource.format)
         ctx.set("current_content", current_content)
 
-        # Set the facts after read if it is a dryrun
-        if ctx.is_dry_run():
-            for k, v in self.extract_facts(
-                ctx, resource, content=current_content
-            ).items():
-                ctx.set_fact(k, v)
-
     def calculate_diff(
         self,
         ctx: inmanta.agent.handler.HandlerContext,
@@ -239,6 +283,16 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 "current": current_content,
                 "desired": desired_content,
             }
+
+        # Set the facts now if it is a dryrun or if there is
+        # no changes
+        if not changes or ctx.is_dry_run():
+            for k, v in self.extract_facts(
+                ctx,
+                desired,
+                content=current_content,
+            ).items():
+                ctx.set_fact(k, v)
 
         return changes
 

@@ -2,6 +2,7 @@
 
 ## v0.6.1 - ?
 
+- Fix JsonFile facts serialization
 
 ## v0.6.0 - 2024-07-17
 
