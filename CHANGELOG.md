@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.1 - ?
+## v0.6.1 - 2024-07-22
 
 - Fix JsonFile facts serialization
 
