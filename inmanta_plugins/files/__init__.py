@@ -15,3 +15,21 @@ limitations under the License.
 
 Contact: edvgui@gmail.com
 """
+
+import pathlib
+
+import inmanta.plugins
+
+
+@inmanta.plugins.plugin()
+def path_join(base_path: "string", *extra: "string") -> "string":  # type: ignore
+    """
+    Join together the base_path and all of the extra parts after it.  If any extra
+    item specified an absolute path (starts with a '/') it will overwrite all the
+    elements of the path before it.
+
+    :param base_path: The base path, a directory, to which should be
+        appended all the extra items.
+    :param *extra: A set of extra parts to add to the path.
+    """
+    return str(pathlib.Path(base_path, *extra))
