@@ -18,6 +18,15 @@ Contact: edvgui@gmail.com
 
 from pytest_inmanta.plugin import Project
 
+import inmanta_plugins.files
+
 
 def test_basics(project: Project) -> None:
     project.compile("import files")
+
+
+def test_path_join() -> None:
+    assert inmanta_plugins.files.path_join("/test", "a", "b") == "/test/a/b"
+    assert inmanta_plugins.files.path_join("/test", "/a", "b") == "/a/b"
+    assert inmanta_plugins.files.path_join("test", "a", "b") == "test/a/b"
+    assert inmanta_plugins.files.path_join("test/", "a", "b") == "test/a/b"
