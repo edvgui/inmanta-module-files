@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0 - ?
+## v1.0.0 - 2024-08-04
 
 - Make sure that the symlink resource can be used to target a non-existing file
 - Use mitogen for handler io
