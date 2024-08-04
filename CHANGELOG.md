@@ -2,6 +2,7 @@
 
 ## v1.0.0 - ?
 
+- Make sure that the symlink resource can be used to target a non-existing file
 - Use mitogen for handler io
 - Add default null value to file owner and group
 - Add files::path_join plugin
