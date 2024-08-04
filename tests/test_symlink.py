@@ -70,6 +70,10 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     assert link.resolve() == target
     assert not project.dryrun_resource("files::Symlink")
 
+    # Delete the symlink target and make sure the resource read doesn't fail
+    target.unlink()
+    assert not project.dryrun_resource("files::Symlink")
+
     # Delete the link
     test_model(project, link, purged=True)
     assert project.dryrun_resource("files::Symlink")
