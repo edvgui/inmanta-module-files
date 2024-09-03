@@ -1,7 +1,7 @@
-isort = isort inmanta_plugins tests
-black_preview = black --preview inmanta_plugins tests
-black = black inmanta_plugins tests
-flake8 = flake8 inmanta_plugins tests
+isort = isort inmanta_plugins tests inmanta_files
+black_preview = black --preview inmanta_plugins tests inmanta_files
+black = black inmanta_plugins tests inmanta_files
+flake8 = flake8 inmanta_plugins tests inmanta_files
 
 format:
 	$(isort)

@@ -1,5 +1,6 @@
 include inmanta_plugins/files/setup.cfg
 include inmanta_plugins/files/py.typed
+include inmanta_files/py.typed
 recursive-include inmanta_plugins/files/model *.cf
 graft inmanta_plugins/files/files
 graft inmanta_plugins/files/templates

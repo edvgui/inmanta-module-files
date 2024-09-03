@@ -1,4 +1,5 @@
 inmanta_plugins/**/__pycache__
+inmanta_files/__pycache__
 tests/**/__pycache__
 *.orig
 .vscode

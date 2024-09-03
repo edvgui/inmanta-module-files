@@ -16,10 +16,6 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
-import grp
-import os
-import pwd
-
 import inmanta.agent.agent
 import inmanta.agent.handler
 import inmanta.agent.io.local
@@ -27,6 +23,7 @@ import inmanta.const
 import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
+import inmanta_files
 import inmanta_plugins.files.base
 import inmanta_plugins.files.json
 
@@ -39,30 +36,6 @@ import inmanta_plugins.files.json
 class SymlinkResource(inmanta_plugins.files.base.BaseFileResource):
     fields = ("target",)
     target: str
-
-
-def symlink_stat(path: str) -> dict[str, object]:
-    """
-    This method is similar to inmanta_mitogen.file_stat excepts that it doesn't
-    try to resolve the symlink on the last element of the path (all other
-    symlinks will be resolved).
-
-    :param path: The path to stat.
-    """
-    # Resolve all the symlinks except the one at the end of the path
-    parent_path = os.path.abspath(os.path.join(path, os.pardir))
-    resolved_parent_path = os.path.realpath(parent_path)
-
-    # Get the stat result for the symlink at the end of the path
-    stat_result = os.stat(
-        os.path.join(resolved_parent_path, os.path.basename(path)),
-        follow_symlinks=False,
-    )
-    return dict(
-        owner=pwd.getpwuid(stat_result.st_uid).pw_name,
-        group=grp.getgrgid(stat_result.st_gid).gr_name,
-        permissions=int(oct(stat_result.st_mode)[-4:]),
-    )
 
 
 @inmanta.agent.handler.provider("files::Symlink", "")
@@ -95,7 +68,7 @@ class SymlinkHandler(inmanta_plugins.files.base.BaseFileHandler[SymlinkResource]
             )
 
         for key, value in self.proxy.remote_call(
-            symlink_stat,
+            inmanta_files.symlink_stat,
             resource.path,
         ).items():
             if getattr(resource, key) is not None:
