@@ -23,10 +23,9 @@ import inmanta.const
 import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
+import inmanta_files
 import inmanta_plugins.files.base
 import inmanta_plugins.files.json
-
-import inmanta_files
 
 
 @inmanta.resources.resource(

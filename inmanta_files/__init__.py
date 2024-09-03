@@ -18,9 +18,10 @@ Contact: edvgui@gmail.com
 This module contains some code that will be executed on a remote host
 using mitogen.
 """
+
+import grp
 import os
 import pwd
-import grp
 
 
 def symlink_stat(path: str) -> dict[str, object]:
