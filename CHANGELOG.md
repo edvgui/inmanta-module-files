@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.1 - ?
+## v1.0.1 - 2024-09-03
 
 - Fix symlink stat operation, move helper to non-namespace package
 
