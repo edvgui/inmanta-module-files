@@ -2,6 +2,7 @@
 
 ## v1.0.1 - ?
 
+- Fix symlink stat operation, move helper to non-namespace package
 
 ## v1.0.0 - 2024-08-04
 
