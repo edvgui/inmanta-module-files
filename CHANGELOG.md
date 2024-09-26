@@ -2,6 +2,7 @@
 
 ## v1.0.2 - ?
 
+- Stop importing unused io module
 
 ## v1.0.1 - 2024-09-03
 
