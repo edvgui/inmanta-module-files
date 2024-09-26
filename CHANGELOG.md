@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.3 - ?
+
+
 ## v1.0.2 - 2024-09-26
 
 - Stop importing unused io module
