@@ -18,7 +18,6 @@ Contact: edvgui@gmail.com
 
 import inmanta.agent.agent
 import inmanta.agent.handler
-import inmanta.agent.io.local
 import inmanta.const
 import inmanta.execute.proxy
 import inmanta.export
