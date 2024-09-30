@@ -1,7 +1,8 @@
 # Changelog
 
-## v1.0.3 - ?
+## v1.1.0 - ?
 
+- Add files::SharedJsonFile resource
 
 ## v1.0.2 - 2024-09-26
 
