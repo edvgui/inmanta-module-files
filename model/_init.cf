@@ -92,36 +92,59 @@ index HostFile(host, path)
 implement HostFile using std::none
 
 
-entity JsonFile extends BaseFile:
+entity JsonFileABC extends BaseFile:
     """
-    A JsonFile on the given host.  The resource contains a set of values
-    that needs to be enforced on the given file.  See files::json::Value for
-    more information about the usage of said values.
+    
 
     :attr indent: The indentiation to use when writing in the file.
     :attr format: The format the json content is supposed to be written in.
-    :attr resource_discriminator: An additional field which allows
-        to create multiple resources for a single file.  This allows
-        to split the different parts of the managed file into different
-        resources (to facilitate partial compile usage for example).
+    
     """
-    string resource_discriminator = ""
     int indent = 2
     json_format_t format = "json"
 end
-JsonFile.values [0:] -- files::json::Value.json_file [1]
+JsonFileABC.values [0:] -- files::json::Value.json_file [1]
 """
 The set of values that will be enforced in the file.
 """
 
-JsonFile.discovered_values [0:] -- files::json::DiscoveredValue.json_file [1]
+JsonFileABC.discovered_values [0:] -- files::json::DiscoveredValue.json_file [1]
 """
 The set of values that should be discovered within the file.
 """
 
-index JsonFile(host, path, resource_discriminator)
+
+entity JsonFile extends JsonFileABC:
+    """
+    A JsonFile on the given host.  The resource contains a set of values
+    that needs to be enforced on the given file.  See files::json::Value for
+    more information about the usage of said values.
+    """
+end
+
+index JsonFile(host, path)
 
 implement JsonFile using std::none
+
+
+entity SharedJsonFile extends JsonFileABC:
+    """
+    A JsonFile on the given host.  The resource contains a set of values
+    that needs to be enforced on the given file.  See files::json::Value for
+    more information about the usage of said values.
+    The difference with the JsonFile resource is that this resource can be
+    split into multiple ones, which share the management of the file.  This is
+    ideal for managing files that needs to be part of a multiple resource sets.
+
+    :attr resource_discriminator: An additional field which allows
+        to create multiple resources for a single file.
+    """
+    string resource_discriminator = ""
+end
+
+index SharedJsonFile(host, path, resource_discriminator)
+
+implement SharedJsonFile using std::none
 
 
 entity SystemdUnitFile extends BaseFile:
