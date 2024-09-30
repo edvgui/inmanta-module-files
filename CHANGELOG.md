@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0 - ?
+## v1.1.0 - 2024-09-30
 
 - Add files::SharedJsonFile resource
 
