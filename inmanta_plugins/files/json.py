@@ -127,7 +127,7 @@ def update(
 
 @inmanta.resources.resource(
     name="files::JsonFile",
-    id_attribute="path",
+    id_attribute="uri",
     agent="host.name",
 )
 class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
@@ -152,6 +152,16 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
             }
             for value in entity.values
         ]
+
+    @classmethod
+    def get_uri(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> str:
+        """
+        Compose a uri to identify the resource, and which allows multiple resources
+        to manage the same file.
+        """
+        if entity.resource_discriminator is not None:
+            return f"{entity.path}:{entity.resource_discriminator}"
+        return entity.path
 
     @classmethod
     def get_discovered_values(

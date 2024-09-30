@@ -100,7 +100,12 @@ entity JsonFile extends BaseFile:
 
     :attr indent: The indentiation to use when writing in the file.
     :attr format: The format the json content is supposed to be written in.
+    :attr resource_discriminator: An additional field which allows
+        to create multiple resources for a single file.  This allows
+        to split the different parts of the managed file into different
+        resources (to facilitate partial compile usage for example).
     """
+    string resource_discriminator = ""
     int indent = 2
     json_format_t format = "json"
 end
@@ -114,7 +119,7 @@ JsonFile.discovered_values [0:] -- files::json::DiscoveredValue.json_file [1]
 The set of values that should be discovered within the file.
 """
 
-index JsonFile(host, path)
+index JsonFile(host, path, resource_discriminator)
 
 implement JsonFile using std::none
 
