@@ -171,13 +171,15 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
     agent="host.name",
 )
 class SharedJsonFileResource(JsonFileResource):
+    fields = ("uri",)
+
     @classmethod
     def get_uri(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> str:
         """
         Compose a uri to identify the resource, and which allows multiple resources
         to manage the same file.
         """
-        if entity.resource_discriminator is not None:
+        if entity.resource_discriminator:
             return f"{entity.path}:{entity.resource_discriminator}"
         return entity.path
 
