@@ -165,7 +165,27 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
         ]
 
 
+@inmanta.resources.resource(
+    name="files::SharedJsonFile",
+    id_attribute="uri",
+    agent="host.name",
+)
+class SharedJsonFileResource(JsonFileResource):
+    fields = ("uri",)
+
+    @classmethod
+    def get_uri(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> str:
+        """
+        Compose a uri to identify the resource, and which allows multiple resources
+        to manage the same file.
+        """
+        if entity.resource_discriminator:
+            return f"{entity.path}:{entity.resource_discriminator}"
+        return entity.path
+
+
 @inmanta.agent.handler.provider("files::JsonFile", "")
+@inmanta.agent.handler.provider("files::SharedJsonFile", "")
 class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResource]):
     def from_json(self, raw: str, *, format: typing.Literal["json", "yaml"]) -> object:
         """
