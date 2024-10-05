@@ -51,7 +51,9 @@ class BaseFileHandler(inmanta_plugins.mitogen.abc.HandlerABC[X]):
         if not hasattr(self.proxy, "_whoami"):
             stdout, stderr, code = self.proxy.run("whoami")
             if code != 0:
-                raise RuntimeError(f"Failed to check current user on the remote host: {stderr}")
+                raise RuntimeError(
+                    f"Failed to check current user on the remote host: {stderr}"
+                )
 
             # Cache the result
             setattr(self.proxy, "_whoami", stdout)
