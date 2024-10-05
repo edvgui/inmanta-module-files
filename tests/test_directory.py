@@ -19,6 +19,7 @@ Contact: edvgui@gmail.com
 import grp
 import os
 import pathlib
+import shutil
 
 import pytest_inmanta.plugin
 
@@ -34,7 +35,6 @@ def test_model(
     model = f"""
         import mitogen
         import files
-        import files::host
 
         import std
 
@@ -77,6 +77,15 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     assert (dir / "in").group() == dir.group()
     assert (dir / "in").stat().st_mode == dir.stat().st_mode
     assert not project.dryrun_resource("files::Directory")
+
+    # Create another directory recursively in a folder that is owned
+    # by root, but running the test as a non-root user
+    other_tmp_path = pathlib.Path("/tmp/test")
+    if other_tmp_path.exists():
+        shutil.rmtree(str(other_tmp_path))
+
+    test_model(project, other_tmp_path / "a", create_parents=True)
+    project.deploy_resource("files::Directory")
 
     # Delete the dir
     test_model(project, dir, purged=True)
