@@ -59,8 +59,12 @@ class DirectoryHandler(inmanta_plugins.files.base.BaseFileHandler[DirectoryResou
                     # Create the parent directory, and make sure it has the
                     # right owner and permissions
                     self.proxy.mkdir(str(parent))
+
+                    if self.whoami() == "root":
+                        # We can only change the ownership if we are root
+                        self.proxy.chown(str(parent), parent_owner, parent_group)
+
                     self.proxy.chmod(str(parent), parent_permissions)
-                    self.proxy.chown(str(parent), parent_owner, parent_group)
                     continue
 
                 # Read the existing folder permissions, and save it for the next child folder

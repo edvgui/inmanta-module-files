@@ -42,6 +42,21 @@ X = typing.TypeVar("X", bound=BaseFileResource)
 
 
 class BaseFileHandler(inmanta_plugins.mitogen.abc.HandlerABC[X]):
+    def whoami(self) -> str:
+        """
+        Check which user is currently running the the commands on the proxy.
+        The result is cached on the proxy object to avoid running the command
+        more times than required.
+        """
+        if not hasattr(self.proxy, "_whoami"):
+            stdout, stderr, code = self.proxy.run("whoami")
+            if code != 0:
+                raise RuntimeError(f"Failed to check current user on the remote host: {stderr}")
+
+            # Cache the result
+            setattr(self.proxy, "_whoami", stdout)
+
+        return typing.cast(str, getattr(self.proxy, "_whoami"))
 
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: X
