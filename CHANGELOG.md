@@ -2,6 +2,7 @@
 
 ## v1.1.1 - ?
 
+- Fix recursive creation of directory for unprivileged access user. (#50)
 
 ## v1.1.0 - 2024-09-30
 
