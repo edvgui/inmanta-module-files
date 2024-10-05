@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.1.2 - ?
+
+
 ## v1.1.1 - 2024-10-05
 
 - Fix recursive creation of directory for unprivileged access user. (#50)
