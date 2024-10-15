@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.1.3 - ?
+
+
 ## v1.1.2 - 2024-10-15
 
 - Widen dependencies constraints
