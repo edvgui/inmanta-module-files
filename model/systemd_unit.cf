@@ -119,7 +119,7 @@ entity Service:
     :attr notify_access: This specifies access to the socket that should be used to listen for notifications when
         the “notify” service type is selected This can be “none”, “main”, or "all. The default, “none”, ignores
         all status messages. The “main” option will listen to messages from the main process and the “all” option
-        will cause all members of the service’s control group to be processed.
+        will cause all members of the service's control group to be processed.
     :attr pid_file: If the service type is marked as “forking”, this directive is used to set the path of the file
         that should contain the process ID number of the main child that should be monitored.
     """
@@ -129,12 +129,12 @@ entity Service:
     int? timeout_sec = null
     int? timeout_stop_sec = null
     int? restart_sec = null
-    string? exec_start_pre = null
+    string[] exec_start_pre = []
     string? exec_start = null
-    string? exec_start_post = null
-    string? exec_stop_pre = null
+    string[] exec_start_post = []
+    string[] exec_stop_pre = []
     string? exec_stop = null
-    string? exec_stop_post = null
+    string[] exec_stop_post = []
     service_type_t? type = null
     string? notify_access = null
     string? pid_file = null
@@ -190,6 +190,22 @@ entity Timer:
 end
 
 
+entity Socket:
+    """
+    A unit configuration file whose name ends in ".socket" encodes
+    information about an IPC or network socket or a file system FIFO
+    controlled and supervised by systemd, for socket-based activation.
+
+    :attr listen_stream: Specifies an address to listen on for a stream (SOCK_STREAM),
+           datagram (SOCK_DGRAM), or sequential packet (SOCK_SEQPACKET)
+           socket, respectively.
+    :attr service: Specifies the service unit name to activate on incoming traffic.
+    """
+    string[] listen_stream = []
+    string? service = null
+end
+
+
 implementation file_content for files::SystemdUnitFile:
     """
     Resolve the content of the unit file, generate it from a jinja template.
@@ -206,4 +222,5 @@ implement Unit using std::none
 implement Service using std::none
 implement Timer using std::none
 implement Install using std::none
+implement Socket using std::none
 implement files::SystemdUnitFile using file_content

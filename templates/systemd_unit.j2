@@ -47,24 +47,24 @@ TimeoutStopSec={{ unit_file.service.timeout_stop_sec }}
 {%- if unit_file.service.restart_sec is not none %}
 RestartSec={{ unit_file.service.restart_sec }}
 {%- endif %}
-{%- if unit_file.service.exec_start_pre is not none %}
-ExecStartPre={{ unit_file.service.exec_start_pre }}
-{%- endif %}
+{%- for exec_start_pre in unit_file.service.exec_start_pre %}
+ExecStartPre={{ exec_start_pre }}
+{%- endfor %}
 {%- if unit_file.service.exec_start is not none %}
 ExecStart={{ unit_file.service.exec_start }}
 {%- endif %}
-{%- if unit_file.service.exec_start_post is not none %}
-ExecStartPost={{ unit_file.service.exec_start_post }}
-{%- endif %}
-{%- if unit_file.service.exec_stop_pre is not none %}
-ExecStopPre={{ unit_file.service.exec_stop_pre }}
-{%- endif %}
+{%- for exec_start_port in unit_file.service.exec_start_post %}
+ExecStartPost={{ exec_start_post }}
+{%- endfor %}
+{%- for exec_stop_pre in unit_file.service.exec_stop_pre %}
+ExecStopPre={{ exec_stop_pre }}
+{%- endfor %}
 {%- if unit_file.service.exec_stop is not none %}
 ExecStop={{ unit_file.service.exec_stop }}
 {%- endif %}
-{%- if unit_file.service.exec_stop_post is not none %}
-ExecStopPost={{ unit_file.service.exec_stop_post }}
-{%- endif %}
+{%- for exec_stop_post in unit_file.service.exec_stop_post %}
+ExecStopPost={{ exec_stop_post }}
+{%- endfor %}
 {%- if unit_file.service.type is not none %}
 Type={{ unit_file.service.type }}
 {%- endif %}
@@ -90,6 +90,17 @@ RandomizedDelaySec={{ unit_file.timer.randomized_delay_sec }}
 {%- endif %}
 {%- if unit_file.timer.unit is not none %}
 Unit={{ unit_file.timer.unit }}
+{%- endif %}
+
+{% endif -%}
+
+{% if unit_file.socket is defined -%}
+[Socket]
+{%- for listen_stream in unit_file.socket.listen_stream %}
+ListenStream={{ listen_stream }}
+{%- endfor %}
+{%- if unit_file.socket.service is not none %}
+Service={{ unit_file.socket.service }}
 {%- endif %}
 
 {% endif -%}
