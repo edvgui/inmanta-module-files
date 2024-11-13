@@ -1,7 +1,8 @@
 # Changelog
 
-## v1.1.3 - ?
+## v1.2.0 - ?
 
+- Add support for systemd socket unit file
 
 ## v1.1.2 - 2024-10-15
 
