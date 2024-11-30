@@ -102,9 +102,9 @@ def test_model(
             service=Service(
                 restart="on-failure",
                 timeout_stop_sec=70,
-                exec_start_pre="/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net",
+                exec_start_pre=["/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net"],
                 exec_start="/usr/bin/bash -c \\"/usr/bin/sleep infinity & /usr/bin/podman network inspect inmanta-orchestrator-net\\"",
-                exec_stop_post="/usr/bin/podman network rm -f inmanta-orchestrator-net",
+                exec_stop_post=["/usr/bin/podman network rm -f inmanta-orchestrator-net"],
                 type="forking",
             ),
             install=Install(
