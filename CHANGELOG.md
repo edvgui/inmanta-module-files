@@ -1,7 +1,8 @@
 # Changelog
 
-## v1.2.0 - ?
+## v2.0.0 - ?
 
+- Fix attributes types for various unit entities
 - Add support for systemd socket unit file
 
 ## v1.1.2 - 2024-10-15
