@@ -2,6 +2,7 @@
 
 ## v2.0.1 - ?
 
+- Add PartOf directive support to unit files
 
 ## v2.0.0 - 2024-11-30
 

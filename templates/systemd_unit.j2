@@ -24,6 +24,9 @@ Before={{ before }}
 {%- for after in unit_file.unit.after %}
 After={{ after }}
 {%- endfor %}
+{%- for part_of in unit_file.unit.part_of %}
+PartOf={{ part_of }}
+{%- endfor %}
 
 {% endif -%}
 
