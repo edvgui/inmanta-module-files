@@ -75,28 +75,55 @@ index TextFile(host, path)
 implement TextFile using std::none
 
 
-entity HostFile extends BaseFile:
+entity HostFileABC extends BaseFile:
     """
     A host file containing a mapping from ips to domain names.  The host file
     is comanaged, we will only merge/replace/remove entries which are specified in
     the entries relation.
     """
 end
-HostFile.entries [0:] -- files::host::Entry.host_file [1]
+HostFileABC.entries [0:] -- files::host::Entry.host_file [1]
 """
 All the entries present in the host file.
 """
+
+
+entity HostFile extends HostFileABC:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    """
+end
 
 index HostFile(host, path)
 
 implement HostFile using std::none
 
 
+entity SharedHostFile extends HostFileABC:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    The difference with the HostFile resource is that this resource can be
+    split into multiple ones, which share the management of the file.  This is
+    ideal for managing files that needs to be part of a multiple resource sets.
+
+    :attr resource_discriminator: An additional field which allows
+        to create multiple resources for a single file.
+    """
+    string resource_discriminator = ""
+end
+
+index SharedHostFile(host, path, resource_discriminator)
+
+implement SharedHostFile using std::none
+
+
 entity JsonFileABC extends BaseFile:
     """
-    
-
-    :attr indent: The indentiation to use when writing in the file.
+    :attr indent: The indentation to use when writing in the file.
     :attr format: The format the json content is supposed to be written in.
     
     """

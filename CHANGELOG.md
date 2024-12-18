@@ -1,10 +1,12 @@
 # Changelog
 
-## v2.0.3 - ?
+## v2.1.0 - ?
 
+- Add files::SharedHostFile resource
 
 ## v2.0.2 - 2024-12-16
 
+- Re-release for dependency version bump
 
 ## v2.0.1 - 2024-12-13
 
