@@ -129,7 +129,28 @@ class HostFileResource(inmanta_plugins.files.base.BaseFileResource):
         ]
 
 
+@inmanta.resources.resource(
+    name="files::SharedHostFile",
+    id_attribute="uri",
+    agent="host.name",
+)
+class SharedHostFileResource(HostFileResource):
+    fields = ("uri",)
+    uri: str
+
+    @classmethod
+    def get_uri(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> str:
+        """
+        Compose a uri to identify the resource, and which allows multiple resources
+        to manage the same file.
+        """
+        if entity.resource_discriminator:
+            return f"{entity.path}:{entity.resource_discriminator}"
+        return entity.path
+
+
 @inmanta.agent.handler.provider("files::HostFile", "")
+@inmanta.agent.handler.provider("files::SharedHostFile", "")
 class HostFileHandler(inmanta_plugins.files.base.BaseFileHandler[HostFileResource]):
     def read_resource(
         self, ctx: inmanta.agent.handler.HandlerContext, resource: HostFileResource
