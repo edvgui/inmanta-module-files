@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.0.3 - ?
+## v2.1.0 - ?
 
+- Add files::SharedHostFile resource
 
 ## v2.0.2 - 2024-12-16
 
