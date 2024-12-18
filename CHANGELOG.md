@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.0 - ?
+## v2.1.0 - 2024-12-18
 
 - Add files::SharedHostFile resource
 
