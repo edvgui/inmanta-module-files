@@ -1,2 +1,2 @@
 inmanta-module-std==8.0.0
-inmanta-module-mitogen==0.2.1
+inmanta-module-mitogen==0.2.2
