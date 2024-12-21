@@ -56,7 +56,7 @@ ExecStartPre={{ exec_start_pre }}
 {%- if unit_file.service.exec_start is not none %}
 ExecStart={{ unit_file.service.exec_start }}
 {%- endif %}
-{%- for exec_start_port in unit_file.service.exec_start_post %}
+{%- for exec_start_post in unit_file.service.exec_start_post %}
 ExecStartPost={{ exec_start_post }}
 {%- endfor %}
 {%- for exec_stop_pre in unit_file.service.exec_stop_pre %}
