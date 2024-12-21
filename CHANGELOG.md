@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.1 - ?
+## v2.1.1 - 2024-12-21
 
 - Fix typo in unit file template
 
