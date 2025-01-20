@@ -12,14 +12,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: 3.12
           architecture: 'x64'
       - name: Install module and its dependencies
         run: |
-          python3.11 -m venv venv
+          python3.12 -m venv venv
           venv/bin/pip install -U pip -r requirements.dev.txt -e . -c requirements.txt
           venv/bin/pip list | grep inmanta
       - name: Lint with flake8
@@ -33,14 +33,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: 3.12
           architecture: 'x64'
       - name: Install module and its dependencies
         run: |
-          python3.11 -m venv venv
+          python3.12 -m venv venv
           venv/bin/pip install -U pip -r requirements.dev.txt -e . -c requirements.txt
           venv/bin/pip list | grep inmanta
       - name: Run tests
