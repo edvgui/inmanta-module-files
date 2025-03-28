@@ -22,7 +22,7 @@ import inmanta.plugins
 
 
 @inmanta.plugins.plugin()
-def path_join(base_path: "string", *extra: "string") -> "string":  # type: ignore
+def path_join(base_path: str, *extra: str) -> str:
     """
     Join together the base_path and all of the extra parts after it.  If any extra
     item specified an absolute path (starts with a '/') it will overwrite all the
