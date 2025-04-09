@@ -24,12 +24,9 @@ import typing
 import inmanta_plugins.std
 import yaml
 
-import inmanta.agent.agent
 import inmanta.agent.handler
-import inmanta.const
 import inmanta.execute.proxy
 import inmanta.execute.util
-import inmanta.export
 import inmanta.plugins
 import inmanta.resources
 import inmanta_plugins.files.base
@@ -39,7 +36,7 @@ from inmanta.util import dict_path
 @inmanta.plugins.plugin()
 def get_json_fact(
     context: inmanta.plugins.Context,
-    resource: object,  # typing.Annotated[typing.Any, inmanta.plugins.ModelType["std::Resource"]],
+    resource: typing.Annotated[typing.Any, inmanta.plugins.ModelType["std::Resource"]],
     fact_name: str,
     *,
     default_value: object | None = None,
