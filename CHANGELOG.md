@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.2 - ?
+## v2.2.0 - ?
 
 - Use python type annotations in plugins
 
