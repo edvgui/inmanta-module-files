@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.2.1 - ?
+
+
 ## v2.2.0 - 2025-04-10
 
 - Use python type annotations in plugins
