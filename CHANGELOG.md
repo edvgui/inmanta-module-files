@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.2.2 - ?
+
+
 ## v2.2.1 - 2025-04-11
 
 - Fix deployment on new executor
