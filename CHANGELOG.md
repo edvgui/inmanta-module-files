@@ -2,6 +2,7 @@
 
 ## v2.2.1 - ?
 
+- Fix deployment on new executor
 
 ## v2.2.0 - 2025-04-10
 
