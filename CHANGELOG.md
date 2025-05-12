@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.3.0 - ?
+## v2.3.0 - 2025-05-12
 
 - Allow to manage json/yaml files containing a list instead of an object
 
