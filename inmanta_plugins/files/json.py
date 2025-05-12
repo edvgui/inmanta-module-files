@@ -134,12 +134,14 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
         "values",
         "discovered_values",
         "named_list",
+        "sort_keys",
     )
     values: list[dict]
     discovered_values: list[dict]
     format: typing.Literal["json", "yaml"]
     indent: int
     named_list: str | None
+    sort_keys: bool
 
     @classmethod
     def get_values(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> list[dict]:
@@ -242,6 +244,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         *,
         format: typing.Literal["json", "yaml"],
         indent: typing.Optional[int] = None,
+        sort_keys: bool = False,
         named_list: str | None = None,
     ) -> str:
         """
@@ -261,9 +264,9 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             value = value[named_list]
 
         if format == "json":
-            return json.dumps(value, indent=indent)
+            return json.dumps(value, indent=indent, sort_keys=sort_keys)
         if format == "yaml":
-            return yaml.safe_dump(value, indent=indent)
+            return yaml.safe_dump(value, indent=indent, sort_keys=sort_keys)
         raise ValueError(f"Unsupported format: {format}")
 
     def extract_facts(
@@ -379,6 +382,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             format=resource.format,
             indent=indent,
             named_list=resource.named_list,
+            sort_keys=resource.sort_keys,
         )
         self.proxy.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
@@ -401,6 +405,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 format=resource.format,
                 indent=indent,
                 named_list=resource.named_list,
+                sort_keys=resource.sort_keys,
             )
             self.proxy.put(resource.path, raw_content.encode())
 
