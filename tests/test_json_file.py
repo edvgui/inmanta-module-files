@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 
+import pytest
 import pytest_inmanta.plugin
 
 
@@ -30,6 +31,7 @@ def test_model(
     purged: bool = False,
     format: str = "json",
     people_fact: str | None = None,
+    named_list: bool = False,
 ) -> None:
     user = os.getlogin()
     group = grp.getgrgid(os.getgid()).gr_name
@@ -53,6 +55,7 @@ def test_model(
             group={repr(group)},
             purged={str(purged).lower()},
             format={repr(format)},
+            named_list={repr("people") if named_list else "null"},
             values=[
                 files::json::Object(
                     path="people[name=bob]",
@@ -95,7 +98,10 @@ def test_model(
         assert dict(discovered[0].values) == json.loads(people_fact)
 
 
-def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize("named_list", [True, False])
+def test_deploy(
+    project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path, named_list: bool
+) -> None:
     file = tmp_path / "friends.json"
     res_id = f"files::JsonFile[localhost,path={file}]"
 
@@ -117,7 +123,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
         return None
 
     # Create the file
-    test_model(project, file, purged=False)
+    test_model(project, file, purged=False, named_list=named_list)
     assert project.dryrun_resource("files::JsonFile")
     assert get_people_fact_value(res_id) is None
     project.deploy_resource("files::JsonFile")
@@ -133,7 +139,10 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
 
     # Manually remove a managed line from the file and make sure we detect a change
     friends = json.loads(file.read_text())
-    del friends["people"]
+    if named_list:
+        friends = []
+    else:
+        del friends["people"]
     file.write_text(json.dumps(friends))
     assert project.dryrun_resource("files::JsonFile")
     assert get_people_fact_value(res_id) == {}
@@ -151,7 +160,8 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     # Insert an extra entry in the file and me sure we don't detect any change as we don't
     # manage that entry
     friends = json.loads(file.read_text())
-    friends["people"].append({"name": "chris"})
+    people = friends if named_list else friends["people"]
+    people.append({"name": "chris"})
     file.write_text(json.dumps(friends))
     assert not project.dryrun_resource("files::JsonFile")
     assert get_people_fact_value(res_id) == {
@@ -162,7 +172,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
 
     # Add the entry that should not be there and make sure it is removed, the unmanaged
     # entry should remain untouched
-    friends["people"].append({"name": "eve"})
+    people.append({"name": "eve"})
     file.write_text(json.dumps(friends))
     assert project.dryrun_resource("files::JsonFile")
     assert get_people_fact_value(res_id) == {
@@ -179,8 +189,9 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     }
     assert not project.dryrun_resource("files::JsonFile")
     friends = json.loads(file.read_text())
-    assert friends["people"][2] == {"name": "chris"}
-    assert len(friends["people"]) == 3
+    people = friends if named_list else friends["people"]
+    assert people[2] == {"name": "chris"}
+    assert len(people) == 3
 
     # Delete the file
     test_model(
@@ -194,6 +205,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
                 "people[name=chris]": {"name": "chris"},
             },
         ),
+        named_list=named_list,
     )
     assert project.dryrun_resource("files::JsonFile")
     assert get_people_fact_value(res_id) == {
@@ -207,7 +219,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
     assert not file.exists()
 
     # Create the file as a yaml
-    test_model(project, file, purged=False, format="yaml")
+    test_model(project, file, purged=False, format="yaml", named_list=named_list)
     assert project.dryrun_resource("files::JsonFile")
     project.deploy_resource("files::JsonFile")
     assert not project.dryrun_resource("files::JsonFile")

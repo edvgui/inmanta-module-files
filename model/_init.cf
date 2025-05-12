@@ -125,10 +125,13 @@ entity JsonFileABC extends BaseFile:
     """
     :attr indent: The indentation to use when writing in the file.
     :attr format: The format the json content is supposed to be written in.
-    
+    :attr named_list: When set, the file is expected to contain a list instead
+        of an object at its root.  Every paths modifying the file's content must
+        start with the list's name.
     """
     int indent = 2
     json_format_t format = "json"
+    string? named_list = null
 end
 JsonFileABC.values [0:] -- files::json::Value.json_file [1]
 """
