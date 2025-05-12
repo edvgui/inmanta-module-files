@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.3.1 - ?
+## v2.4.0 - ?
 
 - Allow to control key sorting when saving a json/yaml file to disk
 
