@@ -133,17 +133,36 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
         "format",
         "values",
         "discovered_values",
+        "named_list",
     )
     values: list[dict]
     discovered_values: list[dict]
     format: typing.Literal["json", "yaml"]
     indent: int
+    named_list: str | None
 
     @classmethod
     def get_values(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> list[dict]:
+        path_prefix = (
+            str(dict_path.InDict(entity.named_list))
+            if entity.named_list is not None
+            else None
+        )
+
+        def validate_path(path: str) -> str:
+            if path_prefix is None:
+                return path
+            if path.startswith(path_prefix + "["):
+                return path
+            else:
+                raise ValueError(
+                    f"Unexpected path {path}.  The resource is a named list, "
+                    f"all paths must start with {path_prefix}"
+                )
+
         return [
             {
-                "path": value.path,
+                "path": validate_path(value.path),
                 "operation": value.operation,
                 "value": value.value,
             }
@@ -184,26 +203,46 @@ class SharedJsonFileResource(JsonFileResource):
 @inmanta.agent.handler.provider("files::JsonFile", "")
 @inmanta.agent.handler.provider("files::SharedJsonFile", "")
 class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResource]):
-    def from_json(self, raw: str, *, format: typing.Literal["json", "yaml"]) -> object:
+    def from_json(
+        self,
+        raw: str,
+        *,
+        format: typing.Literal["json", "yaml"],
+        named_list: str | None = None,
+    ) -> dict:
         """
         Convert a json-like raw string in the expected format to the corresponding
         python dict-like object.
 
         :param raw: The raw value, as read in the file.
         :param format: The format of the value.
+        :param named_list: When this parameter is set, the json/yaml content
+            is expected to be deserialized into a list.  The return object will
+            then be a dict containing a single entry, with as key the value of this
+            parameter and as value the deserialized json/yaml list.
         """
         if format == "json":
-            return json.loads(raw)
-        if format == "yaml":
-            return yaml.safe_load(raw)
-        raise ValueError(f"Unsupported format: {format}")
+            data = json.loads(raw)
+        elif format == "yaml":
+            data = yaml.safe_load(raw)
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+
+        match (data, named_list):
+            case dict(), None:
+                return data
+            case list(), str():
+                return {named_list: data}
+            case _:
+                raise ValueError(f"Unsupported file content: {data}")
 
     def to_json(
         self,
-        value: object,
+        value: dict,
         *,
         format: typing.Literal["json", "yaml"],
         indent: typing.Optional[int] = None,
+        named_list: str | None = None,
     ) -> str:
         """
         Dump a dict-like structure into a json-like string.  The string can
@@ -213,7 +252,14 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         :param format: The format of the value.
         :param indent: Whether any indentation should be applied to the
             value written to file.
+        :param named_list: When this parameter is set, the json/yaml content
+            is expected to be serialized into a list.  The input object will
+            then be a dict containing a single entry, with as key the value of this
+            parameter and as value the json/yaml list to serialize.
         """
+        if named_list is not None:
+            value = value[named_list]
+
         if format == "json":
             return json.dumps(value, indent=indent)
         if format == "yaml":
@@ -267,7 +313,9 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         # Load the content of the existing file
         raw_content = self.proxy.read_binary(resource.path).decode()
         ctx.debug("Reading existing file", raw_content=raw_content)
-        current_content = self.from_json(raw_content, format=resource.format)
+        current_content = self.from_json(
+            raw_content, format=resource.format, named_list=resource.named_list
+        )
         ctx.set("current_content", current_content)
 
     def calculate_diff(
@@ -330,6 +378,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             content,
             format=resource.format,
             indent=indent,
+            named_list=resource.named_list,
         )
         self.proxy.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
@@ -351,6 +400,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 content,
                 format=resource.format,
                 indent=indent,
+                named_list=resource.named_list,
             )
             self.proxy.put(resource.path, raw_content.encode())
 
