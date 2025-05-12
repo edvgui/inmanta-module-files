@@ -2,6 +2,7 @@
 
 ## v2.3.1 - ?
 
+- Allow to control key sorting when saving a json/yaml file to disk
 
 ## v2.3.0 - 2025-05-12
 
