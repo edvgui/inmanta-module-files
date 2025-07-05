@@ -134,7 +134,7 @@ entity JsonFileABC extends BaseFile:
     int indent = 2
     json_format_t format = "json"
     string? named_list = null
-    bool sort_keys = false
+    bool? sort_keys = null
 end
 JsonFileABC.values [0:] -- files::json::Value.json_file [1]
 """
