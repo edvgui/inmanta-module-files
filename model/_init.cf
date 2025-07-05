@@ -128,10 +128,13 @@ entity JsonFileABC extends BaseFile:
     :attr named_list: When set, the file is expected to contain a list instead
         of an object at its root.  Every paths modifying the file's content must
         start with the list's name.
+    :attr sort_keys: Whether every dict's keys should be sorted when the desired
+        state is saved to file.
     """
     int indent = 2
     json_format_t format = "json"
     string? named_list = null
+    bool? sort_keys = null
 end
 JsonFileABC.values [0:] -- files::json::Value.json_file [1]
 """

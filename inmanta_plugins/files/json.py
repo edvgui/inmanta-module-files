@@ -134,12 +134,14 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
         "values",
         "discovered_values",
         "named_list",
+        "sort_keys",
     )
     values: list[dict]
     discovered_values: list[dict]
     format: typing.Literal["json", "yaml"]
     indent: int
     named_list: str | None
+    sort_keys: bool
 
     @classmethod
     def get_values(cls, _, entity: inmanta.execute.proxy.DynamicProxy) -> list[dict]:
@@ -242,6 +244,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         *,
         format: typing.Literal["json", "yaml"],
         indent: typing.Optional[int] = None,
+        sort_keys: bool | None = None,
         named_list: str | None = None,
     ) -> str:
         """
@@ -252,6 +255,8 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         :param format: The format of the value.
         :param indent: Whether any indentation should be applied to the
             value written to file.
+        :param sort_keys: Whether the keys should be sorted when saving the file.
+            Set to None to keep the underlying library's default behavior.
         :param named_list: When this parameter is set, the json/yaml content
             is expected to be serialized into a list.  The input object will
             then be a dict containing a single entry, with as key the value of this
@@ -261,9 +266,11 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             value = value[named_list]
 
         if format == "json":
-            return json.dumps(value, indent=indent)
+            sort_keys = False if sort_keys is None else sort_keys
+            return json.dumps(value, indent=indent, sort_keys=sort_keys)
         if format == "yaml":
-            return yaml.safe_dump(value, indent=indent)
+            sort_keys = True if sort_keys is None else sort_keys
+            return yaml.safe_dump(value, indent=indent, sort_keys=sort_keys)
         raise ValueError(f"Unsupported format: {format}")
 
     def extract_facts(
@@ -379,6 +386,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
             format=resource.format,
             indent=indent,
             named_list=resource.named_list,
+            sort_keys=resource.sort_keys,
         )
         self.proxy.put(resource.path, raw_content.encode())
         super().create_resource(ctx, resource)
@@ -401,6 +409,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
                 format=resource.format,
                 indent=indent,
                 named_list=resource.named_list,
+                sort_keys=resource.sort_keys,
             )
             self.proxy.put(resource.path, raw_content.encode())
 
