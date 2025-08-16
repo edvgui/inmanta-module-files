@@ -130,6 +130,7 @@ entity Service:
         that should contain the process ID number of the main child that should be monitored.
     """
     dict environment = {}
+    string[] environment_file = []
     string? restart = null
     int? timeout_start_sec = null
     int? timeout_sec = null

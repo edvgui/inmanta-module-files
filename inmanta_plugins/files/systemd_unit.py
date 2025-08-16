@@ -23,6 +23,33 @@ import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
 import inmanta_plugins.files.base
+from inmanta.plugins import plugin
+
+
+@plugin
+def quote(s: str) -> str:
+    """
+    Quote a string with double quotes and escape the following characters:
+    - double-quotes
+    - newline
+    - carriage return
+    - backslash
+
+    cf. https://www.freedesktop.org/software/systemd/man/latest/systemd.syntax.html
+
+    The returned string should be the equivalent value for that string in a systemd
+    unit context where quoting is allowed.
+    """
+    escaped_chars = {
+        "\\": "\\\\",
+        "\n": "\\n",
+        "\r": "\\r",
+        "\"": "\\\"",
+    }
+    for k, v in escaped_chars.items():
+        s = s.replace(k, v)
+
+    return '"' + s + '"'
 
 
 @inmanta.resources.resource(
