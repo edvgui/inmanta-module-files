@@ -44,7 +44,7 @@ def quote(s: str) -> str:
         "\\": "\\\\",
         "\n": "\\n",
         "\r": "\\r",
-        "\"": "\\\"",
+        '"': '\\"',
     }
     for k, v in escaped_chars.items():
         s = s.replace(k, v)

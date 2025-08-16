@@ -36,7 +36,7 @@ OnFailure={{ unit_file.unit.on_failure | join(" ") }}
 {%- if unit_file.service is defined -%}
 [Service]
 {%- for name, value in unit_file.service.environment.items() %}
-Environment={{ name + "=" + value | files.systemd_unit.quote() }}
+Environment={{ (name + "=" + value) | files.systemd_unit.quote() }}
 {%- endfor %}
 {%- for environment_file in unit_file.service.environment_file %}
 EnvironmentFile={{ environment_file }}
