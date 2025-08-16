@@ -36,6 +36,7 @@ Before=inmanta-orchestrator-server.service
 After=network-online.target
 
 [Service]
+Environment="TEST=a\\na"
 Restart=on-failure
 TimeoutStopSec=70
 ExecStartPre=/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net
@@ -100,6 +101,8 @@ def test_model(
                 after=["network-online.target"],
             ),
             service=Service(
+                environment={{\"TEST\": \"\"\"a
+a\"\"\"}},
                 restart="on-failure",
                 timeout_stop_sec=70,
                 exec_start_pre=["/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inmanta-orchestrator-net"],

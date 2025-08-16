@@ -27,13 +27,19 @@ After={{ after }}
 {%- for part_of in unit_file.unit.part_of %}
 PartOf={{ part_of }}
 {%- endfor %}
+{%- if unit_file.unit.on_failure is not none %}
+OnFailure={{ unit_file.unit.on_failure | join(" ") }}
+{%- endif %}
 
 {% endif -%}
 
 {%- if unit_file.service is defined -%}
 [Service]
 {%- for name, value in unit_file.service.environment.items() %}
-Environment={{ name }}={{ value }}
+Environment={{ (name + "=" + value) | files.systemd_unit.quote() }}
+{%- endfor %}
+{%- for environment_file in unit_file.service.environment_file %}
+EnvironmentFile={{ environment_file }}
 {%- endfor %}
 {%- if unit_file.service.restart is not none %}
 Restart={{ unit_file.service.restart }}

@@ -80,6 +80,7 @@ entity Unit:
     :attr part_of: Configures dependencies similar to Requires=, but limited to stopping and restarting of
         units. When systemd stops or restarts the units listed here, the action is propagated to this unit.
         Note that this is a one-way dependency — changes to this unit do not affect the listed units.
+    :attr on_failure: one or more units that are activated when this unit enters the "failed" state.
     """
     string? description = null
     string[]? documentation = null
@@ -90,6 +91,7 @@ entity Unit:
     string[] before = []
     string[] after = []
     string[] part_of = []
+    string[]? on_failure = null
 end
 
 
@@ -128,6 +130,7 @@ entity Service:
         that should contain the process ID number of the main child that should be monitored.
     """
     dict environment = {}
+    string[] environment_file = []
     string? restart = null
     int? timeout_start_sec = null
     int? timeout_sec = null
