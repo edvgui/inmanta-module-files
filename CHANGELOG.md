@@ -2,6 +2,7 @@
 
 ## v2.5.0 - ?
 
+- Support OnFailure directive in unit file
 - Automatically escape values in environment variables definition in unit files
 
 ## v2.4.0 - 2025-07-06
