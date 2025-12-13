@@ -30,7 +30,335 @@ import inmanta.execute.util
 import inmanta.plugins
 import inmanta.resources
 import inmanta_plugins.files.base
+from inmanta.ast.attribute import RelationAttribute
+from inmanta.ast.entity import Entity
 from inmanta.util import dict_path
+
+
+class SerializableEntityProtocol(typing.Protocol, inmanta.execute.proxy.DynamicProxy):
+    path: str
+    managed: bool
+    operation: str
+    mapping_overwrite: dict[str, str]
+    parent: "SerializableEntityProtocol"
+    resource: inmanta.execute.proxy.DynamicProxy
+
+
+type SerializableEntity = typing.Annotated[
+    SerializableEntityProtocol,
+    inmanta.plugins.ModelType["files::json::SerializableEntity"],
+]
+
+PARENT_RELATION = "parent"
+SERIALIZABLE_ENTITY_TYPE = "files::json::SerializableEntity"
+
+
+@inmanta.plugins.plugin()
+def get_relation_from_parent(
+    ctx: inmanta.plugins.Context,
+    serializable_entity: SerializableEntity,
+) -> str | None:
+    """
+    Figure out the relation that leads to a serializable entity, from its parent,
+    if it has any.  If the entity has no parent, return None instead.
+
+    :param serializable_entity: An instance of the serializable entity, for
+        which we want to know the relation from the parent.
+    """
+    entity_type = serializable_entity._type()
+    parent_relation = entity_type.get_attribute(PARENT_RELATION)
+
+    match parent_relation:
+        case None:
+            # No relation named "parent"
+            return None
+        case RelationAttribute():
+            if parent_relation.is_optional():
+                # We always need a parent
+                raise ValueError(
+                    f"Parent relation on type {entity_type.type_string()} "
+                    "is optional, this is not allowed."
+                )
+
+            if parent_relation.is_multi():
+                # We always need a single parent
+                raise ValueError(
+                    f"Parent relation on type {entity_type.type_string()} "
+                    "has an arity greater than 1, this is not allowed."
+                )
+
+            if parent_relation.end is None:
+                # We need a reverse relation from the parent
+                raise ValueError(
+                    f"Parent relation on type {entity_type.type_string()} "
+                    "is unidirectional, this is not allowed."
+                )
+
+            parent_type = parent_relation.end.entity
+            if not isinstance(parent_type, Entity):
+                raise RuntimeError(
+                    f"Unexpected type for parent relation end's entity: {parent_type} ({type(parent_type)})"
+                )
+
+            if SERIALIZABLE_ENTITY_TYPE not in parent_type.get_all_parent_names():
+                # The parent entity should also be a serializable entity
+                raise ValueError(
+                    f"Parent entity of {entity_type.type_string()} "
+                    f"({parent_type.type_string()}) is not a subentity of "
+                    f"{SERIALIZABLE_ENTITY_TYPE}."
+                )
+
+            return parent_relation.end.name
+        case _:
+            raise ValueError(
+                f"Unexpected type for parent relation on type {entity_type.type_string()}"
+            )
+
+
+@inmanta.plugins.plugin()
+def get_relative_path(serializable_entity: SerializableEntity) -> str | None:
+    """
+    Calculate the relative path from the parent entity.  If there is no parent
+    entity, return None instead.  The relative path is derived from the index
+    of this entity that contains the relation to the parent entity.
+
+    :param serializable_entity: The instance for which we want to get the
+        path from the parent, or None if the entity doesn't have a parent.
+    """
+    relation_from_parent = get_relation_from_parent(serializable_entity)
+    if relation_from_parent is None:
+        # No parent, no relative parent
+        return None
+
+    # If the relation from parent has been overwritten in the mapping of
+    # the parent, we should adapt the relative path too.
+    relation_from_parent = serializable_entity.parent.mapping_overwrite.get(
+        relation_from_parent,
+        relation_from_parent,
+    )
+
+    entity_type = serializable_entity._type()
+    indices = entity_type.get_indices()
+
+    for index in indices:
+        if PARENT_RELATION not in index:
+            # We only consider the index expression that contain the
+            # parent relation, this allows to define additional index
+            # related to the entity usage.
+            continue
+
+        index_attributes = [
+            attr
+            for attr_name in index
+            if attr_name != PARENT_RELATION
+            and (attr := entity_type.get_attribute(attr_name)) is not None
+        ]
+
+        # Make sure that none of the attributes used in the index are relations
+        # as this wouldn't work for the dict_path expression we are constructing
+        relation_attributes = [
+            attr for attr in index_attributes if isinstance(attr, RelationAttribute)
+        ]
+        if relation_attributes:
+            raise ValueError(
+                f"Invalid index on type {entity_type.type_string()}. "
+                f"Index {index} contains some relations: {[attr.name for attr in relation_attributes]}"
+            )
+
+        if not index_attributes:
+            # Single instance, use InDict path
+            return str(dict_path.InDict(relation_from_parent))
+        else:
+            return str(
+                dict_path.KeyedList(
+                    relation_from_parent,
+                    [
+                        (attr.name, getattr(serializable_entity, attr.name))
+                        for attr in index_attributes
+                    ],
+                )
+            )
+
+    # No valid index defined, impossible to derive a relative path.
+    raise LookupError(
+        f"Could not find any valid index on entity {entity_type.type_string()}."
+    )
+
+
+def get_instance_attributes(
+    serializable_entity: SerializableEntity,
+    *,
+    serializable_entity_type: Entity,
+) -> dict[str, object]:
+    """
+    Serialize a serializable entity into a dict containing its attributes.
+    The method returns an empty dict if there are no attributes defined, or
+    if the entity type is not a subclass of the serializable entity type.
+
+    :param serializable_entity: The instance to serialize
+    :param serializable_entity_type: The type of the entity to serialize
+    """
+    if serializable_entity_type.type_string() == SERIALIZABLE_ENTITY_TYPE:
+        # The base entity doesn't have any attribute to serialize
+        return {}
+
+    if SERIALIZABLE_ENTITY_TYPE not in serializable_entity_type.get_all_parent_names():
+        # This entity is not a subentity of the serializable entity
+        # its attributes are not serializable
+        return {}
+
+    attributes: dict[str, object] = {}
+    for super_entity in serializable_entity_type.parent_entities:
+        # Let each parent entity extract the relevant attributes from the
+        # model, if they have the right type
+        attributes.update(
+            get_instance_attributes(
+                serializable_entity,
+                serializable_entity_type=super_entity,
+            )
+        )
+
+    for attr_name, attr in serializable_entity_type.attributes.items():
+        if isinstance(attr, RelationAttribute):
+            # Only consider primitive attributes
+            continue
+
+        if (
+            attr_name.startswith("_")
+            and attr_name not in serializable_entity.mapping_overwrite
+        ):
+            # Private attributes should not be serialized
+            continue
+
+        # Add the serialized attribute to the dict of attributes
+        serialized_name = serializable_entity.mapping_overwrite.get(
+            attr_name, attr_name
+        )
+        attributes[serialized_name] = getattr(serializable_entity, attr_name)
+
+    return attributes
+
+
+def get_child_instances(
+    serializable_entity: SerializableEntity,
+    *,
+    serializable_entity_type: Entity,
+) -> dict[str, list[SerializableEntity] | SerializableEntity]:
+    """
+    Get all the child serializable entities of a serializable entity.
+    """
+    if serializable_entity_type.type_string() == SERIALIZABLE_ENTITY_TYPE:
+        # The base entity doesn't have any attribute to serialize
+        return {}
+
+    if SERIALIZABLE_ENTITY_TYPE not in serializable_entity_type.get_all_parent_names():
+        # This entity is not a subentity of the serializable entity
+        # its attributes are not serializable
+        return {}
+
+    attributes: dict[str, list[SerializableEntity] | SerializableEntity] = {}
+    for super_entity in serializable_entity_type.parent_entities:
+        # Let each parent entity extract the relevant attributes from the
+        # model, if they have the right type
+        attributes.update(
+            get_child_instances(
+                serializable_entity,
+                serializable_entity_type=super_entity,
+            )
+        )
+
+    for attr_name, attr in serializable_entity_type.attributes.items():
+        if not isinstance(attr, RelationAttribute):
+            # Only consider primitive attributes
+            continue
+
+        if attr.end is None:
+            # Child instances will always be bi-directional
+            continue
+
+        child_type = attr.end.entity
+        if not isinstance(child_type, Entity):
+            raise RuntimeError(
+                f"Unexpected type for child relation end's entity: {child_type} ({type(child_type)})"
+            )
+
+        if SERIALIZABLE_ENTITY_TYPE not in child_type.get_all_parent_names():
+            # Not a relation towards a serializable entity
+            continue
+
+        if (
+            attr_name.startswith("_")
+            and attr_name not in serializable_entity.mapping_overwrite
+        ):
+            # Private attributes should not be serialized
+            continue
+
+        # Add the serialized attribute to the dict of attributes
+        serialized_name = serializable_entity.mapping_overwrite.get(
+            attr_name, attr_name
+        )
+        attributes[serialized_name] = (
+            getattr(serializable_entity, attr_name)
+            if not attr.is_multi()
+            else list(getattr(serializable_entity, attr_name))
+        )
+
+    return attributes
+
+
+@inmanta.plugins.plugin()
+def serialize(
+    serializable_entity: SerializableEntity,
+) -> dict | None:
+    """
+    Serialize a serializable entity instance.  Return it as a dict containing
+    the path leading to this value, the value, and the operation to use
+    when updating the value.
+
+    If the entity is not managed, None is returned instead.
+
+    When the operation is "replace", the serialized value will also contain all the child instances.
+    When the operation is "merge", the serialized value only contains the attributes of this instance.
+    When the operation is "remove", the serialized value is None as we don't need to know its content.
+
+    :param serializable_entity: An instance of a serializable entity.
+    """
+    if not serializable_entity.managed:
+        # The entity is not managed, no need to serialize it
+        return None
+
+    if serializable_entity.operation == "remove":
+        # No need to serialize, we remove it anyway
+        value = None
+    elif serializable_entity.operation == "merge":
+        value = get_instance_attributes(
+            serializable_entity,
+            serializable_entity_type=serializable_entity._type(),
+        )
+    elif serializable_entity.operation == "replace":
+        value = get_instance_attributes(
+            serializable_entity,
+            serializable_entity_type=serializable_entity._type(),
+        )
+
+        # This is a replace operation, we also need to fetch all the
+        # child instances
+        for attr_name, instances in get_child_instances(
+            serializable_entity,
+            serializable_entity_type=serializable_entity._type(),
+        ).items():
+            if isinstance(instances, list):
+                value[attr_name] = [serialize(instance) for instance in instances]
+            else:
+                value[attr_name] = serialize(instances)
+    else:
+        raise ValueError(f"Unexpected operation: {serializable_entity.operation}")
+
+    return {
+        "path": serializable_entity.path,
+        "operation": serializable_entity.operation,
+        "value": value,
+    }
 
 
 @inmanta.plugins.plugin()

@@ -19,6 +19,39 @@ import std
 import files
 
 
+entity SerializableEntity:
+    """
+    Base entity for all entities that should be serializable using
+    the files::json::serialize.
+
+    :attr path: The full path leading from the root of the json tree
+        to this entity.  The relative path is calculated based on the
+        index defined for each entity type.  The index must include the
+        relation to the parent entity and a subset of attributes of this
+        entity.
+        The entity at the root of the tree must define the root of the path.
+    :attr managed: Whether this entity should be emitted when being serialized
+    :attr operation: The operation to apply to the current state when enforcing
+        this entity's intent.
+    :attr mapping_overwrite: When serializing the entity, by default, each non-private
+        attribute/relation is used in the serialized version of the entity.  This
+        behavior can be overwritten by providing in the keys the attribute name
+        and as value the name of the attribute in the serialized version of the
+        entity.
+    """
+    string path
+    bool managed = true
+    files::operation_t operation
+    dict mapping_overwrite = {}
+end
+
+SerializableEntity.resource [0:1] -- std::Resource
+"""
+The resource "owning" this part of the serializable entities tree.
+This allows to split the management of the tree into multiple entities.
+"""
+
+
 entity Value:
     """
     A value present in a json file.  This is an abstract entity, it should be
@@ -73,4 +106,36 @@ implementation get_values for DiscoveredValue:
     self.values = get_json_fact(self.json_file, self.path, soft_fail=true)
 end
 
+implementation path_from_parent for SerializableEntity:
+    """
+    Calculate the path attribute of this entity, based on the parent
+    relation and the index.
+    """
+    relative_path = get_relative_path(self)
+
+    if relative_path is defined:
+        # Resolve the absolute path for this entity
+        if self.parent.path == ".":
+            self.path = self.relative_path
+        else:
+            self.path = self.parent.path + "." + relative_path
+        end
+
+        # Make sure that if the parent has a replace operation, we
+        # are attached to the same resource
+        if self.parent.operation == "replace":
+            self.resource = self.parent.resource
+            self.operation = self.parent.operation
+            self.managed = true
+        end
+
+        # Make sure that if the parent has a delete operation, we
+        # are being deleted as well
+        if self.parent.operation == "remove":
+            self.operation = self.parent.operation
+        end
+    end
+end
+
 implement DiscoveredValue using get_values
+implement SerializableEntity using path_from_parent
