@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.5.1 - ?
+## v2.6.0 - ?
 
+- Add files::json::SerializableEntity for easy DSL entities serialization
 
 ## v2.5.0 - 2025-08-17
 
