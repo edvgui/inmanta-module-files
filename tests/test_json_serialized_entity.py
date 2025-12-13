@@ -255,6 +255,7 @@ implement std::Resource using std::none
             },
         },
     ]
+
     assert serialize_for_resource(
         instance,
         res_b,
