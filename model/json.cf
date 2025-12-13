@@ -33,6 +33,8 @@ entity SerializableEntity:
     :attr managed: Whether this entity should be emitted when being serialized
     :attr operation: The operation to apply to the current state when enforcing
         this entity's intent.
+    :attr _operation: The resolved operation.  Equal to the input operation if
+        it was provided, and defaults to the parent operation if no value was provided.
     :attr mapping_overwrite: When serializing the entity, by default, each non-private
         attribute/relation is used in the serialized version of the entity.  This
         behavior can be overwritten by providing in the keys the attribute name
@@ -41,7 +43,8 @@ entity SerializableEntity:
     """
     string path
     bool managed = true
-    files::operation_t operation
+    files::operation_t? operation = null
+    files::operation_t? _operation
     dict mapping_overwrite = {}
 end
 
@@ -49,6 +52,12 @@ SerializableEntity.resource [0:1] -- std::Resource
 """
 The resource "owning" this part of the serializable entities tree.
 This allows to split the management of the tree into multiple entities.
+"""
+
+SerializableEntity._resource [1] -- std::Resource
+"""
+Resolved resource, based on the input resource and the resource of the parent
+if no resource has been explicitly attached.
 """
 
 
@@ -113,6 +122,25 @@ implementation path_from_parent for SerializableEntity:
     """
     relative_path = get_relative_path(self)
 
+    # Handle default operation
+    if self.operation is defined:
+        self._operation = self.operation
+    elif relative_path is defined:
+        self._operation = self.parent._operation
+    else:
+        self._operation = "merge"
+    end
+
+    # Handle default resource
+    if self.resource is defined:
+        self._resource = self.resource
+    elif relative_path is defined:
+        self._resource = self.parent._resource
+    else:
+        std::assert(false, f"No resource attached to {self} (path={self.path})")
+    end
+
+    # Handle default path
     if relative_path is defined:
         # Resolve the absolute path for this entity
         if self.parent.path == ".":
@@ -123,16 +151,16 @@ implementation path_from_parent for SerializableEntity:
 
         # Make sure that if the parent has a replace operation, we
         # are attached to the same resource
-        if self.parent.operation == "replace":
-            self.resource = self.parent.resource
-            self.operation = self.parent.operation
+        if self.parent._operation == "replace":
+            self._resource = self.parent._resource
+            self._operation = "replace"
             self.managed = true
         end
 
         # Make sure that if the parent has a delete operation, we
         # are being deleted as well
         if self.parent.operation == "remove":
-            self.operation = self.parent.operation
+            self._operation = "remove"
         end
     end
 end

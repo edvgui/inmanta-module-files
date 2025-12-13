@@ -17,8 +17,8 @@ Contact: edvgui@gmail.com
 """
 
 import pytest_inmanta.plugin
-from inmanta_plugins.files.json import serialize
 
+from inmanta_plugins.files.json import serialize, serialize_for_resource
 
 TYPE_DEFINITION = """
 import files::json
@@ -162,6 +162,131 @@ implement std::Resource using std::none
                     "attr": {},
                     "recursive": [],
                 },
-            ]
+            ],
         },
     }
+
+
+def test_merge(project: pytest_inmanta.plugin.Project) -> None:
+    model = """
+res_a = std::Resource()
+res_b = std::Resource()
+
+a = Test(
+    name="test",
+    required=RequiredEmbeddedTest(
+        name="required",
+        recursive=[
+            RecursiveEmbeddedTest(
+                name="a",
+                recursive=RecursiveEmbeddedTest(
+                    name="a",
+                ),
+            ),
+        ],
+        resource=res_a,
+        operation="replace",
+    ),
+    optional=OptionalEmbeddedTest(
+        name="optional",
+    ),
+    many=[
+        ManyEmbeddedTest(
+            name="a",
+            resource=res_a,
+        ),
+        ManyEmbeddedTest(
+            name="b",
+        ),
+    ],
+    path=".",
+    operation="merge",
+    resource=res_b,
+)
+
+implement std::Resource using std::none
+"""
+
+    project.compile(TYPE_DEFINITION + model)
+
+    instance = project.get_instances("__config__::Test")[0]
+    res_a = instance.required.resource
+    res_b = instance.resource
+
+    assert serialize_for_resource(
+        instance,
+        res_a,
+    ) == [
+        {
+            "operation": "replace",
+            "path": "required",
+            "value": {
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "required",
+                "recursive": [
+                    {
+                        "attr": {},
+                        "count": 0,
+                        "flag": False,
+                        "name": "a",
+                        "recursive": [
+                            {
+                                "attr": {},
+                                "count": 0,
+                                "flag": False,
+                                "name": "a",
+                                "recursive": [],
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+        {
+            "operation": "merge",
+            "path": "many[name=a]",
+            "value": {
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "a",
+            },
+        },
+    ]
+    assert serialize_for_resource(
+        instance,
+        res_b,
+    ) == [
+        {
+            "operation": "merge",
+            "path": ".",
+            "value": {
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "test",
+            },
+        },
+        {
+            "operation": "merge",
+            "path": "optional",
+            "value": {
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "optional",
+            },
+        },
+        {
+            "operation": "merge",
+            "path": "many[name=b]",
+            "value": {
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "b",
+            },
+        },
+    ]
