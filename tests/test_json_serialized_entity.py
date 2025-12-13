@@ -25,9 +25,9 @@ import files::json
 
 entity Test extends files::json::SerializableEntity:
     string name
-    int count = 0
-    bool flag = false
-    dict attr = {}
+    int? count = 0
+    bool? flag = false
+    dict? attr = {}
 end
 Test.optional [0:1] -- OptionalEmbeddedTest.parent [1]
 Test.required [1] -- RequiredEmbeddedTest.parent [1]
@@ -35,9 +35,9 @@ Test.many [0:] -- ManyEmbeddedTest.parent [1]
 
 entity EmbeddedTestABC extends files::json::SerializableEntity:
     string name
-    int count = 0
-    bool flag = false
-    dict attr = {}
+    int? count = 0
+    bool? flag = false
+    dict? attr = {}
 end
 EmbeddedTestABC.recursive [0:] -- RecursiveEmbeddedTest.parent [1]
 
@@ -176,6 +176,7 @@ a = Test(
     name="test",
     required=RequiredEmbeddedTest(
         name="required",
+        count=null,
         recursive=[
             RecursiveEmbeddedTest(
                 name="a",
@@ -189,10 +190,12 @@ a = Test(
     ),
     optional=OptionalEmbeddedTest(
         name="optional",
+        flag=null,
     ),
     many=[
         ManyEmbeddedTest(
             name="a",
+            attr=null,
             resource=res_a,
         ),
         ManyEmbeddedTest(
@@ -222,7 +225,7 @@ implement std::Resource using std::none
             "path": "required",
             "value": {
                 "attr": {},
-                "count": 0,
+                "count": None,
                 "flag": False,
                 "name": "required",
                 "recursive": [
@@ -248,7 +251,6 @@ implement std::Resource using std::none
             "operation": "merge",
             "path": "many[name=a]",
             "value": {
-                "attr": {},
                 "count": 0,
                 "flag": False,
                 "name": "a",
@@ -276,7 +278,6 @@ implement std::Resource using std::none
             "value": {
                 "attr": {},
                 "count": 0,
-                "flag": False,
                 "name": "optional",
             },
         },
