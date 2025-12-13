@@ -116,7 +116,7 @@ implementation path_from_parent for SerializableEntity:
     if relative_path is defined:
         # Resolve the absolute path for this entity
         if self.parent.path == ".":
-            self.path = self.relative_path
+            self.path = relative_path
         else:
             self.path = self.parent.path + "." + relative_path
         end

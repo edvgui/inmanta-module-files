@@ -34,8 +34,10 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.util import dict_path
 
+from inmanta.execute.proxy import SequenceProxy
+from collections.abc import Mapping, Sequence
 
-class SerializableEntityProtocol(typing.Protocol, inmanta.execute.proxy.DynamicProxy):
+class SerializableEntityProtocol(typing.Protocol):
     path: str
     managed: bool
     operation: str
@@ -53,9 +55,27 @@ PARENT_RELATION = "parent"
 SERIALIZABLE_ENTITY_TYPE = "files::json::SerializableEntity"
 
 
+def json_value(raw_value: object) -> object:
+    """
+    Convert an immutable value (i.e. coming from the inmanta DSL) into
+    a mutable, json-like python object.  Sequences are converted into
+    lists, and Mappings into dicts.  Any other value is kept as is.
+
+    :param raw_value: The raw value that should be converted.
+    """
+    match raw_value:
+        case str():
+            return raw_value
+        case Sequence() | SequenceProxy():
+            return [json_value(item) for item in raw_value]
+        case Mapping():
+            return {k: json_value(v) for k, v in raw_value.items()}
+        case _:
+            return raw_value
+
+
 @inmanta.plugins.plugin()
 def get_relation_from_parent(
-    ctx: inmanta.plugins.Context,
     serializable_entity: SerializableEntity,
 ) -> str | None:
     """
@@ -234,7 +254,7 @@ def get_instance_attributes(
         serialized_name = serializable_entity.mapping_overwrite.get(
             attr_name, attr_name
         )
-        attributes[serialized_name] = getattr(serializable_entity, attr_name)
+        attributes[serialized_name] = json_value(getattr(serializable_entity, attr_name))
 
     return attributes
 
@@ -268,6 +288,10 @@ def get_child_instances(
         )
 
     for attr_name, attr in serializable_entity_type.attributes.items():
+        if attr_name == PARENT_RELATION:
+            # We only want the child entities
+            continue
+        
         if not isinstance(attr, RelationAttribute):
             # Only consider primitive attributes
             continue
@@ -331,10 +355,15 @@ def serialize(
         # No need to serialize, we remove it anyway
         value = None
     elif serializable_entity.operation == "merge":
-        value = get_instance_attributes(
-            serializable_entity,
-            serializable_entity_type=serializable_entity._type(),
-        )
+        # Merge, drop all optionals, these are value we don't care about
+        value = {
+            attr: value
+            for attr, value in get_instance_attributes(
+                serializable_entity,
+                serializable_entity_type=serializable_entity._type(),
+            ).items()
+            if value is not None
+        }
     elif serializable_entity.operation == "replace":
         value = get_instance_attributes(
             serializable_entity,
@@ -348,9 +377,9 @@ def serialize(
             serializable_entity_type=serializable_entity._type(),
         ).items():
             if isinstance(instances, list):
-                value[attr_name] = [serialize(instance) for instance in instances]
+                value[attr_name] = [serialize(instance)["value"] for instance in instances]
             else:
-                value[attr_name] = serialize(instances)
+                value[attr_name] = serialize(instances)["value"]
     else:
         raise ValueError(f"Unexpected operation: {serializable_entity.operation}")
 
