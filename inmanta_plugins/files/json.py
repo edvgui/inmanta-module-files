@@ -433,14 +433,18 @@ def serialize(
         ).items():
             if isinstance(instances, list):
                 value[attr_name] = [
-                    serialized["value"]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+                    serialized[
+                        "value"
+                    ]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
                     for instance in instances
                     if (serialized := serialize(instance)) is not None
                 ]
             else:
                 serialized = serialize(instances)
                 if serialized is not None:
-                    value[attr_name] = serialized["value"]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+                    value[attr_name] = serialized[
+                        "value"
+                    ]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
     else:
         raise ValueError(f"Unexpected operation: {current_operation}")
 
