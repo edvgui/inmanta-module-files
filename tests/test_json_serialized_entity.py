@@ -18,9 +18,14 @@ Contact: edvgui@gmail.com
 
 import pytest_inmanta.plugin
 
-from inmanta_plugins.files.json import serialize, serialize_for_resource
+from inmanta_plugins.files.json import (
+    SerializedEntity,
+    serialize,
+    serialize_for_resource,
+)
 
 TYPE_DEFINITION = """
+import files
 import files::json
 
 entity Test extends files::json::SerializableEntity:
@@ -28,6 +33,7 @@ entity Test extends files::json::SerializableEntity:
     int? count = 0
     bool? flag = false
     dict? attr = {}
+    files::operation_t? operation = "merge"
 end
 Test.optional [0:1] -- OptionalEmbeddedTest.parent [1]
 Test.required [1] -- RequiredEmbeddedTest.parent [1]
@@ -109,10 +115,10 @@ implement std::Resource using std::none
     project.compile(TYPE_DEFINITION + model)
 
     instance = project.get_instances("__config__::Test")[0]
-    assert serialize(instance) == {
-        "path": ".",
-        "operation": "replace",
-        "value": {
+    assert serialize(instance) == SerializedEntity(
+        path=".",
+        operation="replace",
+        value={
             "name": "test",
             "count": 0,
             "flag": False,
@@ -164,7 +170,7 @@ implement std::Resource using std::none
                 },
             ],
         },
-    }
+    )
 
 
 def test_merge(project: pytest_inmanta.plugin.Project) -> None:
@@ -220,10 +226,10 @@ implement std::Resource using std::none
         instance,
         res_a,
     ) == [
-        {
-            "operation": "replace",
-            "path": "required",
-            "value": {
+        SerializedEntity(
+            operation="replace",
+            path="required",
+            value={
                 "attr": {},
                 "count": None,
                 "flag": False,
@@ -246,49 +252,175 @@ implement std::Resource using std::none
                     },
                 ],
             },
-        },
-        {
-            "operation": "merge",
-            "path": "many[name=a]",
-            "value": {
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="many[name=a]",
+            value={
                 "count": 0,
                 "flag": False,
                 "name": "a",
             },
-        },
+        ),
     ]
 
     assert serialize_for_resource(
         instance,
         res_b,
     ) == [
-        {
-            "operation": "merge",
-            "path": ".",
-            "value": {
+        SerializedEntity(
+            operation="merge",
+            path=".",
+            value={
                 "attr": {},
                 "count": 0,
                 "flag": False,
                 "name": "test",
             },
-        },
-        {
-            "operation": "merge",
-            "path": "optional",
-            "value": {
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="optional",
+            value={
                 "attr": {},
                 "count": 0,
                 "name": "optional",
             },
-        },
-        {
-            "operation": "merge",
-            "path": "many[name=b]",
-            "value": {
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="many[name=b]",
+            value={
                 "attr": {},
                 "count": 0,
                 "flag": False,
                 "name": "b",
             },
-        },
+        ),
+    ]
+
+
+def test_remove(project: pytest_inmanta.plugin.Project) -> None:
+    model = """
+res_a = std::Resource()
+res_b = std::Resource()
+
+a = Test(
+    name="test",
+    required=RequiredEmbeddedTest(
+        name="required",
+        count=null,
+        recursive=[
+            RecursiveEmbeddedTest(
+                name="a",
+                recursive=RecursiveEmbeddedTest(
+                    name="a",
+                ),
+            ),
+        ],
+        resource=res_a,
+        operation="remove",
+    ),
+    optional=OptionalEmbeddedTest(
+        name="optional",
+        flag=null,
+        recursive=[
+            RecursiveEmbeddedTest(
+                name="a",
+                recursive=RecursiveEmbeddedTest(
+                    name="a",
+                    resource=res_b,
+                ),
+                resource=res_a,
+                operation="remove",
+            ),
+        ],
+    ),
+    many=[
+        ManyEmbeddedTest(
+            name="a",
+            attr=null,
+            resource=res_a,
+        ),
+        ManyEmbeddedTest(
+            name="b",
+        ),
+    ],
+    path=".",
+    operation="merge",
+    resource=res_b,
+)
+
+implement std::Resource using std::none
+"""
+
+    project.compile(TYPE_DEFINITION + model)
+
+    instance = project.get_instances("__config__::Test")[0]
+    res_a = instance.required.resource
+    res_b = instance.resource
+
+    assert serialize_for_resource(
+        instance,
+        res_a,
+    ) == [
+        SerializedEntity(
+            operation="remove",
+            path="optional.recursive[name=a]",
+            value=None,
+        ),
+        SerializedEntity(
+            operation="remove",
+            path="required",
+            value=None,
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="many[name=a]",
+            value={
+                "count": 0,
+                "flag": False,
+                "name": "a",
+            },
+        ),
+    ]
+
+    assert serialize_for_resource(
+        instance,
+        res_b,
+    ) == [
+        SerializedEntity(
+            operation="merge",
+            path=".",
+            value={
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "test",
+            },
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="optional",
+            value={
+                "attr": {},
+                "count": 0,
+                "name": "optional",
+            },
+        ),
+        SerializedEntity(
+            operation="remove",
+            path="optional.recursive[name=a].recursive[name=a]",
+            value=None,
+        ),
+        SerializedEntity(
+            operation="merge",
+            path="many[name=b]",
+            value={
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "b",
+            },
+        ),
     ]

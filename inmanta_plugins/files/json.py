@@ -21,6 +21,7 @@ import enum
 import json
 import typing
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 import inmanta_plugins.std
 import yaml
@@ -31,6 +32,7 @@ import inmanta.execute.util
 import inmanta.plugins
 import inmanta.resources
 import inmanta_plugins.files.base
+from inmanta.ast import OptionalValueException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.execute.proxy import SequenceProxy
@@ -49,6 +51,7 @@ class SerializableEntityProtocol(typing.Protocol):
     mapping_overwrite: dict[str, str]
     parent: "SerializableEntityProtocol"
     _resource: Resource
+    _type: typing.Callable[[], Entity]
 
 
 type SerializableEntity = typing.Annotated[
@@ -58,6 +61,13 @@ type SerializableEntity = typing.Annotated[
 
 PARENT_RELATION = "parent"
 SERIALIZABLE_ENTITY_TYPE = "files::json::SerializableEntity"
+SERIALIZABLE_ENTITY_ATTRIBUTES = [
+    "path",
+    "managed",
+    "operation",
+    "_operation",
+    "mapping_overwrite",
+]
 
 
 def json_value(raw_value: object) -> object:
@@ -77,6 +87,24 @@ def json_value(raw_value: object) -> object:
             return {k: json_value(v) for k, v in raw_value.items()}
         case _:
             return raw_value
+
+
+def get_optional_relation(entity: object, name: str) -> object | None:
+    """
+    helper function to get the value of an optional relation, which will raise
+    an OptionalValueException when the relation is not set.
+    """
+    try:
+        return getattr(entity, name)
+    except OptionalValueException:
+        return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SerializedEntity:
+    path: str
+    operation: str
+    value: dict | None
 
 
 @inmanta.plugins.plugin()
@@ -244,6 +272,11 @@ def get_instance_attributes(
         )
 
     for attr_name, attr in serializable_entity_type.attributes.items():
+        if attr_name in SERIALIZABLE_ENTITY_ATTRIBUTES:
+            # Make sure that any redefinition of the attributes of the base entity
+            # stay ignored
+            continue
+
         if isinstance(attr, RelationAttribute):
             # Only consider primitive attributes
             continue
@@ -329,7 +362,7 @@ def get_child_instances(
             attr_name, attr_name
         )
         attributes[serialized_name] = (
-            getattr(serializable_entity, attr_name)
+            get_optional_relation(serializable_entity, attr_name)
             if not attr.is_multi()
             else list(getattr(serializable_entity, attr_name))
         )
@@ -340,7 +373,7 @@ def get_child_instances(
 @inmanta.plugins.plugin()
 def serialize(
     serializable_entity: SerializableEntity,
-) -> dict | None:
+) -> SerializedEntity | None:
     """
     Serialize a serializable entity instance.  Return it as a dict containing
     the path leading to this value, the value, and the operation to use
@@ -360,10 +393,10 @@ def serialize(
 
     current_operation = serializable_entity._operation
 
-    if current_operation == "remove":
+    if current_operation == Operation.REMOVE:
         # No need to serialize, we remove it anyway
         value = None
-    elif current_operation == "merge":
+    elif current_operation == Operation.MERGE:
         # Merge, drop all optionals, these are value we don't care about
         value = {
             attr: value
@@ -373,7 +406,7 @@ def serialize(
             ).items()
             if value is not None
         }
-    elif current_operation == "replace":
+    elif current_operation == Operation.REPLACE:
         value = get_instance_attributes(
             serializable_entity,
             serializable_entity_type=serializable_entity._type(),
@@ -387,28 +420,29 @@ def serialize(
         ).items():
             if isinstance(instances, list):
                 value[attr_name] = [
-                    serialize(
-                        instance,
-                    )["value"]
+                    serialized.value
                     for instance in instances
+                    if (serialized := serialize(instance)) is not None
                 ]
             else:
-                value[attr_name] = serialize(instances)["value"]
+                serialized = serialize(instances)
+                if serialized is not None:
+                    value[attr_name] = serialized.value
     else:
         raise ValueError(f"Unexpected operation: {current_operation}")
 
-    return {
-        "path": serializable_entity.path,
-        "operation": current_operation,
-        "value": value,
-    }
+    return SerializedEntity(
+        path=serializable_entity.path,
+        operation=current_operation,
+        value=value,
+    )
 
 
 @inmanta.plugins.plugin()
 def serialize_for_resource(
     serializable_entity: SerializableEntity,
     resource: Resource,
-) -> list[dict]:
+) -> list[SerializedEntity]:
     """
     Go through the serializable entity tree, and return a list of all
     the serialized entities which are attached to the given resource.
@@ -420,16 +454,20 @@ def serialize_for_resource(
     current_resource = serializable_entity._resource
     current_operation = serializable_entity._operation
 
-    if current_operation == "replace":
+    if current_operation == Operation.REPLACE:
         # A replace tree is not shared, if the resource is not
         # attached to this entity, it won't be attached lower
         # in the tree either
         if current_resource == resource:
-            return [serialize(serializable_entity)]
+            serialized = serialize(serializable_entity)
+            if serialized is not None:
+                return [serialized]
+            else:
+                return []
         else:
             return []
 
-    if current_operation == "remove":
+    if current_operation == Operation.REMOVE:
         if current_resource == resource:
             # This entity is deleted and attached to our resource, we don't
             # need to look further in the tree for other deleted elements
@@ -437,7 +475,7 @@ def serialize_for_resource(
         else:
             # We still try to see if our resource is supposed to delete some
             # part of the config before this entity is deleted
-            serialized: list[dict] = []
+            serialized: list[SerializedEntity | None] = []
             for _, instances in get_child_instances(
                 serializable_entity,
                 serializable_entity_type=serializable_entity._type(),
@@ -458,13 +496,13 @@ def serialize_for_resource(
                         ),
                     )
 
-            return serialized
+            return [s for s in serialized if s is not None]
 
-    if current_operation == "merge":
+    if current_operation == Operation.MERGE:
         # For a merge operation, we might share a part of the tree with any
         # other resource, we take what we can at ever level and group them
         # in a list
-        serialized: list[dict] = []
+        serialized: list[SerializedEntity | None] = []
         if current_resource == resource:
             serialized.append(serialize(serializable_entity))
 
@@ -488,7 +526,7 @@ def serialize_for_resource(
                     ),
                 )
 
-        return serialized
+        return [s for s in serialized if s is not None]
 
     raise ValueError(f"Unexpected operation: {current_operation}")
 

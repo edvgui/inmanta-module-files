@@ -19,10 +19,28 @@ import std
 import files
 
 
+entity SerializedEntity extends std::Dataclass:
+    """
+    The serialized version of a SerializableEntity, as returned by the
+    files::json::serialize plugin.
+
+    :attr path: The path within the full object where this serialized entity
+        should manage the desired state.
+    :attr operation: The operation to apply on the full object at the given
+        path.
+    :attr value: The actual value that should be merged, inserted or removed
+        from the full object.
+    """
+    string path
+    string operation
+    dict? value
+end
+
+
 entity SerializableEntity:
     """
     Base entity for all entities that should be serializable using
-    the files::json::serialize.
+    the files::json::serialize plugin.
 
     :attr path: The full path leading from the root of the json tree
         to this entity.  The relative path is calculated based on the
@@ -166,4 +184,5 @@ implementation path_from_parent for SerializableEntity:
 end
 
 implement DiscoveredValue using get_values
+implement SerializedEntity using std::none
 implement SerializableEntity using path_from_parent
