@@ -239,7 +239,7 @@ def get_relative_path(serializable_entity: SerializableEntity) -> str | None:
                 dict_path.KeyedList(
                     relation_from_parent,
                     [
-                        (attr.name, getattr(serializable_entity, attr.name))
+                        (attr.name, str(getattr(serializable_entity, attr.name)))
                         for attr in index_attributes
                     ],
                 )
@@ -374,11 +374,12 @@ def get_child_instances(
         serialized_name = serializable_entity.mapping_overwrite.get(
             attr_name, attr_name
         )
-        attributes[serialized_name] = (
-            get_optional_relation(serializable_entity, attr_name)
-            if not attr.is_multi()
-            else list(getattr(serializable_entity, attr_name))
-        )
+        if attr.is_multi():
+            attributes[serialized_name] = list(getattr(serializable_entity, attr_name))
+        else:
+            optional_entity = get_optional_relation(serializable_entity, attr_name)
+            if optional_entity is not None:
+                attributes[serialized_name] = optional_entity
 
     return attributes
 
