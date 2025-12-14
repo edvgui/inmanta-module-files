@@ -20,8 +20,8 @@ import copy
 import enum
 import json
 import typing
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import asdict, dataclass
 
 import inmanta_plugins.std
 import yaml
@@ -50,7 +50,8 @@ class SerializableEntityProtocol(typing.Protocol):
     _operation: str
     mapping_overwrite: dict[str, str]
     parent: "SerializableEntityProtocol"
-    _resource: Resource
+    root: "SerializableEntityProtocol"
+    _resource: "JsonResourceProtocol"
     _type: typing.Callable[[], Entity]
 
 
@@ -58,6 +59,18 @@ type SerializableEntity = typing.Annotated[
     SerializableEntityProtocol,
     inmanta.plugins.ModelType["files::json::SerializableEntity"],
 ]
+
+
+class JsonResourceProtocol(typing.Protocol):
+    entities: Collection[SerializableEntityProtocol]
+    serialized: Collection["SerializedEntity"]
+
+
+type JsonResource = typing.Annotated[
+    JsonResourceProtocol,
+    inmanta.plugins.ModelType["files::json::JsonResource"],
+]
+
 
 PARENT_RELATION = "parent"
 SERIALIZABLE_ENTITY_TYPE = "files::json::SerializableEntity"
@@ -373,7 +386,7 @@ def get_child_instances(
 @inmanta.plugins.plugin()
 def serialize(
     serializable_entity: SerializableEntity,
-) -> SerializedEntity | None:
+) -> dict | None:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
     """
     Serialize a serializable entity instance.  Return it as a dict containing
     the path leading to this value, the value, and the operation to use
@@ -420,29 +433,32 @@ def serialize(
         ).items():
             if isinstance(instances, list):
                 value[attr_name] = [
-                    serialized.value
+                    serialized["value"]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
                     for instance in instances
                     if (serialized := serialize(instance)) is not None
                 ]
             else:
                 serialized = serialize(instances)
                 if serialized is not None:
-                    value[attr_name] = serialized.value
+                    value[attr_name] = serialized["value"]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
     else:
         raise ValueError(f"Unexpected operation: {current_operation}")
 
-    return SerializedEntity(
-        path=serializable_entity.path,
-        operation=current_operation,
-        value=value,
+    # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+    return asdict(
+        SerializedEntity(
+            path=serializable_entity.path,
+            operation=current_operation,
+            value=value,
+        )
     )
 
 
 @inmanta.plugins.plugin()
 def serialize_for_resource(
     serializable_entity: SerializableEntity,
-    resource: Resource,
-) -> list[SerializedEntity]:
+    resource: JsonResource,
+) -> list[dict]:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
     """
     Go through the serializable entity tree, and return a list of all
     the serialized entities which are attached to the given resource.
@@ -460,10 +476,7 @@ def serialize_for_resource(
         # in the tree either
         if current_resource == resource:
             serialized = serialize(serializable_entity)
-            if serialized is not None:
-                return [serialized]
-            else:
-                return []
+            return [serialized] if serialized is not None else []
         else:
             return []
 
@@ -471,7 +484,8 @@ def serialize_for_resource(
         if current_resource == resource:
             # This entity is deleted and attached to our resource, we don't
             # need to look further in the tree for other deleted elements
-            return [serialize(serializable_entity)]
+            serialized = serialize(serializable_entity)
+            return [serialized] if serialized is not None else []
         else:
             # We still try to see if our resource is supposed to delete some
             # part of the config before this entity is deleted

@@ -18,11 +18,7 @@ Contact: edvgui@gmail.com
 
 import pytest_inmanta.plugin
 
-from inmanta_plugins.files.json import (
-    SerializedEntity,
-    serialize,
-    serialize_for_resource,
-)
+from inmanta_plugins.files.json import serialize, serialize_for_resource
 
 TYPE_DEFINITION = """
 import files
@@ -106,16 +102,14 @@ a = Test(
     ],
     path=".",
     operation="replace",
-    resource=std::Resource(),
+    resource=files::json::JsonResource(),
 )
-
-implement std::Resource using std::none
-    """
+"""
 
     project.compile(TYPE_DEFINITION + model)
 
     instance = project.get_instances("__config__::Test")[0]
-    assert serialize(instance) == SerializedEntity(
+    assert serialize(instance) == dict(
         path=".",
         operation="replace",
         value={
@@ -175,8 +169,8 @@ implement std::Resource using std::none
 
 def test_merge(project: pytest_inmanta.plugin.Project) -> None:
     model = """
-res_a = std::Resource()
-res_b = std::Resource()
+res_a = files::json::JsonResource()
+res_b = files::json::JsonResource()
 
 a = Test(
     name="test",
@@ -212,8 +206,6 @@ a = Test(
     operation="merge",
     resource=res_b,
 )
-
-implement std::Resource using std::none
 """
 
     project.compile(TYPE_DEFINITION + model)
@@ -226,7 +218,7 @@ implement std::Resource using std::none
         instance,
         res_a,
     ) == [
-        SerializedEntity(
+        dict(
             operation="replace",
             path="required",
             value={
@@ -253,7 +245,7 @@ implement std::Resource using std::none
                 ],
             },
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="many[name=a]",
             value={
@@ -268,7 +260,7 @@ implement std::Resource using std::none
         instance,
         res_b,
     ) == [
-        SerializedEntity(
+        dict(
             operation="merge",
             path=".",
             value={
@@ -278,7 +270,7 @@ implement std::Resource using std::none
                 "name": "test",
             },
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="optional",
             value={
@@ -287,7 +279,7 @@ implement std::Resource using std::none
                 "name": "optional",
             },
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="many[name=b]",
             value={
@@ -302,8 +294,8 @@ implement std::Resource using std::none
 
 def test_remove(project: pytest_inmanta.plugin.Project) -> None:
     model = """
-res_a = std::Resource()
-res_b = std::Resource()
+res_a = files::json::JsonResource()
+res_b = files::json::JsonResource()
 
 a = Test(
     name="test",
@@ -350,8 +342,6 @@ a = Test(
     operation="merge",
     resource=res_b,
 )
-
-implement std::Resource using std::none
 """
 
     project.compile(TYPE_DEFINITION + model)
@@ -364,17 +354,17 @@ implement std::Resource using std::none
         instance,
         res_a,
     ) == [
-        SerializedEntity(
+        dict(
             operation="remove",
             path="optional.recursive[name=a]",
             value=None,
         ),
-        SerializedEntity(
+        dict(
             operation="remove",
             path="required",
             value=None,
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="many[name=a]",
             value={
@@ -389,7 +379,7 @@ implement std::Resource using std::none
         instance,
         res_b,
     ) == [
-        SerializedEntity(
+        dict(
             operation="merge",
             path=".",
             value={
@@ -399,7 +389,7 @@ implement std::Resource using std::none
                 "name": "test",
             },
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="optional",
             value={
@@ -408,12 +398,12 @@ implement std::Resource using std::none
                 "name": "optional",
             },
         ),
-        SerializedEntity(
+        dict(
             operation="remove",
             path="optional.recursive[name=a].recursive[name=a]",
             value=None,
         ),
-        SerializedEntity(
+        dict(
             operation="merge",
             path="many[name=b]",
             value={

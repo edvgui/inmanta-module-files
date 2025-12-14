@@ -19,7 +19,8 @@ import std
 import files
 
 
-entity SerializedEntity extends std::Dataclass:
+# TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+entity SerializedEntity:
     """
     The serialized version of a SerializableEntity, as returned by the
     files::json::serialize plugin.
@@ -66,16 +67,45 @@ entity SerializableEntity:
     dict mapping_overwrite = {}
 end
 
-SerializableEntity.resource [0:1] -- std::Resource
+SerializableEntity.resource [0:1] -- JsonResource.entities [0:]
 """
 The resource "owning" this part of the serializable entities tree.
 This allows to split the management of the tree into multiple entities.
 """
 
-SerializableEntity._resource [1] -- std::Resource
+SerializableEntity._resource [1] -- JsonResource
 """
 Resolved resource, based on the input resource and the resource of the parent
 if no resource has been explicitly attached.
+"""
+
+SerializableEntity.root [1] -- SerializableEntity
+"""
+Relation towards the root of the serializable entity tree.  The root is the
+entity that doesn't have any parent relation.  The plugin files::json::serialize_for_resource
+should always be called on the root of the tree.
+"""
+
+
+entity JsonResource extends std::Resource:
+    """
+    Base entity for all resources who'se desired state represents a json object.
+    This entity should be extended by each resource with its custom handler.
+    This entity takes care of serializing all the attached entities into a list of
+    of objects (SerializedEntity) that can be used in the handler to update the
+    current state object with the content of the desired state.
+    """
+end
+JsonResource.root [0:1] -- SerializableEntity
+"""
+The root of the serializable entity, on which the serialize_for_resource plugin
+should be called.  This relation is used to validate that all attached entities
+share the same root.
+"""
+
+JsonResource.serialized [0:] -- SerializedEntity
+"""
+The list of a serialized entities that compose this resource.
 """
 
 
@@ -180,9 +210,41 @@ implementation path_from_parent for SerializableEntity:
         if self.parent.operation == "remove":
             self._operation = "remove"
         end
+
+        # The parent's root is the root
+        self.root = self.parent.root
+    else:
+        # No parent, this is the root of the tree
+        self.root = self
     end
 end
+
+
+implementation serialize_entities for JsonResource:
+    # Make sure we have a single root
+    for e in self.entities:
+        self.root = e.root
+    end
+
+    # If at least one entity is attached, serialize the full tree
+    # and attach each entity into the serialized relation
+    if self.root is defined:
+        # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+        self.serialized = [
+            SerializedEntity(
+                path=s["path"],
+                operation=s["operation"],
+                value=s["value"],
+            )
+            for s in serialize_for_resource(self.root, self)
+        ]
+    else:
+        self.serialized = []
+    end
+end
+
 
 implement DiscoveredValue using get_values
 implement SerializedEntity using std::none
 implement SerializableEntity using path_from_parent
+implement JsonResource using serialize_entities
