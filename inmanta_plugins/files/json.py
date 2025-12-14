@@ -383,10 +383,9 @@ def get_child_instances(
     return attributes
 
 
-@inmanta.plugins.plugin()
 def serialize(
     serializable_entity: SerializableEntity,
-) -> dict | None:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+) -> SerializedEntity | None:
     """
     Serialize a serializable entity instance.  Return it as a dict containing
     the path leading to this value, the value, and the operation to use
@@ -433,36 +432,35 @@ def serialize(
         ).items():
             if isinstance(instances, list):
                 value[attr_name] = [
-                    serialized[
-                        "value"
-                    ]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+                    serialized.value
                     for instance in instances
                     if (serialized := serialize(instance)) is not None
                 ]
             else:
                 serialized = serialize(instances)
                 if serialized is not None:
-                    value[attr_name] = serialized[
-                        "value"
-                    ]  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+                    value[attr_name] = serialized.value
     else:
         raise ValueError(f"Unexpected operation: {current_operation}")
 
-    # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
-    return asdict(
-        SerializedEntity(
-            path=serializable_entity.path,
-            operation=current_operation,
-            value=value,
-        )
+    return SerializedEntity(
+        path=serializable_entity.path,
+        operation=current_operation,
+        value=value,
     )
 
 
-@inmanta.plugins.plugin()
+@inmanta.plugins.plugin("serialize")
+def serialize_plugin(
+    serializable_entity: SerializableEntity,
+) -> dict | None:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+    return asdict(serialize(serializable_entity))
+
+
 def serialize_for_resource(
     serializable_entity: SerializableEntity,
     resource: JsonResource,
-) -> list[dict]:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+) -> list[SerializedEntity]:
     """
     Go through the serializable entity tree, and return a list of all
     the serialized entities which are attached to the given resource.
@@ -547,6 +545,14 @@ def serialize_for_resource(
         return [s for s in serialized if s is not None]
 
     raise ValueError(f"Unexpected operation: {current_operation}")
+
+
+@inmanta.plugins.plugin("serialize_for_resource")
+def serialize_for_resource_plugin(
+    serializable_entity: SerializableEntity,
+    resource: JsonResource,
+) -> list[dict]:  # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+    return [asdict(s) for s in serialize_for_resource(serializable_entity, resource)]
 
 
 @inmanta.plugins.plugin()

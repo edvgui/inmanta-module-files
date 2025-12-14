@@ -18,7 +18,11 @@ Contact: edvgui@gmail.com
 
 import pytest_inmanta.plugin
 
-from inmanta_plugins.files.json import serialize, serialize_for_resource
+from inmanta_plugins.files.json import (
+    SerializedEntity,
+    serialize,
+    serialize_for_resource,
+)
 
 TYPE_DEFINITION = """
 import files
@@ -109,7 +113,7 @@ a = Test(
     project.compile(TYPE_DEFINITION + model)
 
     instance = project.get_instances("__config__::Test")[0]
-    assert serialize(instance) == dict(
+    assert serialize(instance) == SerializedEntity(
         path=".",
         operation="replace",
         value={
@@ -218,7 +222,7 @@ a = Test(
         instance,
         res_a,
     ) == [
-        dict(
+        SerializedEntity(
             operation="replace",
             path="required",
             value={
@@ -245,7 +249,7 @@ a = Test(
                 ],
             },
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="many[name=a]",
             value={
@@ -260,7 +264,7 @@ a = Test(
         instance,
         res_b,
     ) == [
-        dict(
+        SerializedEntity(
             operation="merge",
             path=".",
             value={
@@ -270,7 +274,7 @@ a = Test(
                 "name": "test",
             },
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="optional",
             value={
@@ -279,7 +283,7 @@ a = Test(
                 "name": "optional",
             },
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="many[name=b]",
             value={
@@ -354,17 +358,17 @@ a = Test(
         instance,
         res_a,
     ) == [
-        dict(
+        SerializedEntity(
             operation="remove",
             path="optional.recursive[name=a]",
             value=None,
         ),
-        dict(
+        SerializedEntity(
             operation="remove",
             path="required",
             value=None,
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="many[name=a]",
             value={
@@ -379,7 +383,7 @@ a = Test(
         instance,
         res_b,
     ) == [
-        dict(
+        SerializedEntity(
             operation="merge",
             path=".",
             value={
@@ -389,7 +393,7 @@ a = Test(
                 "name": "test",
             },
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="optional",
             value={
@@ -398,12 +402,12 @@ a = Test(
                 "name": "optional",
             },
         ),
-        dict(
+        SerializedEntity(
             operation="remove",
             path="optional.recursive[name=a].recursive[name=a]",
             value=None,
         ),
-        dict(
+        SerializedEntity(
             operation="merge",
             path="many[name=b]",
             value={
