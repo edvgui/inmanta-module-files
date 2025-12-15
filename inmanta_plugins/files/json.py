@@ -249,7 +249,11 @@ def get_relative_path(serializable_entity: SerializableEntity) -> str | None:
                     [
                         (
                             serializable_entity.mapping_overwrite.get(key, key),
-                            value if value is not None else dict_path.NullValue().escape(),
+                            (
+                                value
+                                if value is not None
+                                else dict_path.NullValue().escape()
+                            ),
                         )
                         for key, value in keys.items()
                     ],

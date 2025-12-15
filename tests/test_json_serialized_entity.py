@@ -40,7 +40,7 @@ Test.required [1] -- RequiredEmbeddedTest.parent [1]
 Test.many [0:] -- ManyEmbeddedTest.parent [1]
 
 entity EmbeddedTestABC extends files::json::SerializableEntity:
-    string name
+    string? name
     int? count = 0
     bool? flag = false
     dict? attr = {}
@@ -322,7 +322,7 @@ a = Test(
         flag=null,
         recursive=[
             RecursiveEmbeddedTest(
-                name="a",
+                name=null,
                 recursive=RecursiveEmbeddedTest(
                     name="a",
                     resource=res_b,
@@ -360,7 +360,7 @@ a = Test(
     ) == [
         SerializedEntity(
             operation="remove",
-            path="optional.recursive[name=a]",
+            path=r"optional.recursive[name=\0]",
             value=None,
         ),
         SerializedEntity(
@@ -404,7 +404,7 @@ a = Test(
         ),
         SerializedEntity(
             operation="remove",
-            path="optional.recursive[name=a].recursive[name=a]",
+            path=r"optional.recursive[name=\0].recursive[name=a]",
             value=None,
         ),
         SerializedEntity(
