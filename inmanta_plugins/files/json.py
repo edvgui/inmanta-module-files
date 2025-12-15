@@ -235,12 +235,23 @@ def get_relative_path(serializable_entity: SerializableEntity) -> str | None:
             # Single instance, use InDict path
             return str(dict_path.InDict(relation_from_parent))
         else:
+            # Get the keys and values from the model
+            keys = {
+                attr.name: getattr(serializable_entity, attr.name)
+                for attr in index_attributes
+            }
+
+            # Normalize the keys, use the overwrite if it is defined, replace None value
+            # by proper escape character
             return str(
                 dict_path.KeyedList(
                     relation_from_parent,
                     [
-                        (attr.name, str(getattr(serializable_entity, attr.name)))
-                        for attr in index_attributes
+                        (
+                            serializable_entity.mapping_overwrite.get(key, key),
+                            value if value is not None else dict_path.NullValue().escape(),
+                        )
+                        for key, value in keys.items()
                     ],
                 )
             )
