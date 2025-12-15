@@ -29,6 +29,10 @@ same semantic.
 cf. https://datatracker.ietf.org/doc/html/rfc4741#section-7.2
 """
 
+replace = "replace"
+remove = "remove"
+merge = "merge"
+
 typedef json_format_t as string matching self in ["json", "yaml"]
 
 

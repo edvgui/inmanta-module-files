@@ -3,6 +3,7 @@
 ## v2.6.0 - ?
 
 - Add files::json::SerializableEntity for easy DSL entities serialization
+- Define constants for operations replace, remove and merge
 
 ## v2.5.0 - 2025-08-17
 

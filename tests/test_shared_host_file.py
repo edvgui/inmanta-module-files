@@ -61,7 +61,7 @@ def test_model(
                 files::host::Entry(
                     hostname="example.com",
                     address4="192.168.10.10",
-                    operation="replace",
+                    operation=files::replace,
                 ),
             ],
         )
@@ -74,7 +74,7 @@ def test_model(
             entries=[
                 files::host::Entry(
                     hostname="example.be",
-                    operation="remove",
+                    operation=files::remove,
                 ),
             ],
         )
@@ -88,7 +88,7 @@ def test_model(
                 files::host::Entry(
                     hostname="example.eu",
                     address4="192.168.10.10",
-                    operation="merge",
+                    operation=files::merge,
                 ),
             ],
         )

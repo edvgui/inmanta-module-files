@@ -20,11 +20,7 @@ import typing
 
 import inmanta_plugins.mitogen.abc
 
-import inmanta.agent.agent
 import inmanta.agent.handler
-import inmanta.const
-import inmanta.execute.proxy
-import inmanta.export
 import inmanta.resources
 
 
