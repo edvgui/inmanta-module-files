@@ -176,7 +176,7 @@ implementation path_from_parent for SerializableEntity:
     elif relative_path is defined:
         self._operation = self.parent._operation
     else:
-        self._operation = "merge"
+        self._operation = files::merge
     end
 
     # Handle default resource
@@ -199,16 +199,16 @@ implementation path_from_parent for SerializableEntity:
 
         # Make sure that if the parent has a replace operation, we
         # are attached to the same resource
-        if self.parent._operation == "replace":
+        if self.parent._operation == files::replace:
             self._resource = self.parent._resource
-            self._operation = "replace"
+            self._operation = files::replace
             self.managed = true
         end
 
         # Make sure that if the parent has a delete operation, we
         # are being deleted as well
-        if self.parent.operation == "remove":
-            self._operation = "remove"
+        if self.parent.operation == files::remove:
+            self._operation = files::remove
         end
 
         # The parent's root is the root
