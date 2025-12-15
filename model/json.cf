@@ -19,6 +19,96 @@ import std
 import files
 
 
+# TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+entity SerializedEntity:
+    """
+    The serialized version of a SerializableEntity, as returned by the
+    files::json::serialize plugin.
+
+    :attr path: The path within the full object where this serialized entity
+        should manage the desired state.
+    :attr operation: The operation to apply on the full object at the given
+        path.
+    :attr value: The actual value that should be merged, inserted or removed
+        from the full object.
+    """
+    string path
+    string operation
+    dict? value
+end
+
+
+entity SerializableEntity:
+    """
+    Base entity for all entities that should be serializable using
+    the files::json::serialize plugin.
+
+    :attr path: The full path leading from the root of the json tree
+        to this entity.  The relative path is calculated based on the
+        index defined for each entity type.  The index must include the
+        relation to the parent entity and a subset of attributes of this
+        entity.
+        The entity at the root of the tree must define the root of the path.
+    :attr managed: Whether this entity should be emitted when being serialized
+    :attr operation: The operation to apply to the current state when enforcing
+        this entity's intent.
+    :attr _operation: The resolved operation.  Equal to the input operation if
+        it was provided, and defaults to the parent operation if no value was provided.
+    :attr mapping_overwrite: When serializing the entity, by default, each non-private
+        attribute/relation is used in the serialized version of the entity.  This
+        behavior can be overwritten by providing in the keys the attribute name
+        and as value the name of the attribute in the serialized version of the
+        entity.
+    """
+    string path
+    bool managed = true
+    files::operation_t? operation = null
+    files::operation_t? _operation
+    dict mapping_overwrite = {}
+end
+
+SerializableEntity.resource [0:1] -- JsonResource.entities [0:]
+"""
+The resource "owning" this part of the serializable entities tree.
+This allows to split the management of the tree into multiple entities.
+"""
+
+SerializableEntity._resource [1] -- JsonResource
+"""
+Resolved resource, based on the input resource and the resource of the parent
+if no resource has been explicitly attached.
+"""
+
+SerializableEntity.root [1] -- SerializableEntity
+"""
+Relation towards the root of the serializable entity tree.  The root is the
+entity that doesn't have any parent relation.  The plugin files::json::serialize_for_resource
+should always be called on the root of the tree.
+"""
+
+
+entity JsonResource extends std::Resource:
+    """
+    Base entity for all resources who'se desired state represents a json object.
+    This entity should be extended by each resource with its custom handler.
+    This entity takes care of serializing all the attached entities into a list of
+    of objects (SerializedEntity) that can be used in the handler to update the
+    current state object with the content of the desired state.
+    """
+end
+JsonResource.root [0:1] -- SerializableEntity
+"""
+The root of the serializable entity, on which the serialize_for_resource plugin
+should be called.  This relation is used to validate that all attached entities
+share the same root.
+"""
+
+JsonResource.serialized [0:] -- SerializedEntity
+"""
+The list of a serialized entities that compose this resource.
+"""
+
+
 entity Value:
     """
     A value present in a json file.  This is an abstract entity, it should be
@@ -73,4 +163,88 @@ implementation get_values for DiscoveredValue:
     self.values = get_json_fact(self.json_file, self.path, soft_fail=true)
 end
 
+implementation path_from_parent for SerializableEntity:
+    """
+    Calculate the path attribute of this entity, based on the parent
+    relation and the index.
+    """
+    relative_path = get_relative_path(self)
+
+    # Handle default operation
+    if self.operation is defined:
+        self._operation = self.operation
+    elif relative_path is defined:
+        self._operation = self.parent._operation
+    else:
+        self._operation = "merge"
+    end
+
+    # Handle default resource
+    if self.resource is defined:
+        self._resource = self.resource
+    elif relative_path is defined:
+        self._resource = self.parent._resource
+    else:
+        std::assert(false, f"No resource attached to {self} (path={self.path})")
+    end
+
+    # Handle default path
+    if relative_path is defined:
+        # Resolve the absolute path for this entity
+        if self.parent.path == ".":
+            self.path = relative_path
+        else:
+            self.path = self.parent.path + "." + relative_path
+        end
+
+        # Make sure that if the parent has a replace operation, we
+        # are attached to the same resource
+        if self.parent._operation == "replace":
+            self._resource = self.parent._resource
+            self._operation = "replace"
+            self.managed = true
+        end
+
+        # Make sure that if the parent has a delete operation, we
+        # are being deleted as well
+        if self.parent.operation == "remove":
+            self._operation = "remove"
+        end
+
+        # The parent's root is the root
+        self.root = self.parent.root
+    else:
+        # No parent, this is the root of the tree
+        self.root = self
+    end
+end
+
+
+implementation serialize_entities for JsonResource:
+    # Make sure we have a single root
+    for e in self.entities:
+        self.root = e.root
+    end
+
+    # If at least one entity is attached, serialize the full tree
+    # and attach each entity into the serialized relation
+    if self.root is defined:
+        # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
+        self.serialized = [
+            SerializedEntity(
+                path=s["path"],
+                operation=s["operation"],
+                value=s["value"],
+            )
+            for s in serialize_for_resource(self.root, self)
+        ]
+    else:
+        self.serialized = []
+    end
+end
+
+
 implement DiscoveredValue using get_values
+implement SerializedEntity using std::none
+implement SerializableEntity using path_from_parent
+implement JsonResource using serialize_entities
