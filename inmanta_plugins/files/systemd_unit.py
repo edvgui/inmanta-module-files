@@ -16,11 +16,7 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
-import inmanta.agent.agent
 import inmanta.agent.handler
-import inmanta.const
-import inmanta.execute.proxy
-import inmanta.export
 import inmanta.resources
 import inmanta_plugins.files.base
 from inmanta.plugins import plugin
