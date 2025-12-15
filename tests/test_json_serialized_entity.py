@@ -19,6 +19,7 @@ Contact: edvgui@gmail.com
 import pytest_inmanta.plugin
 
 from inmanta_plugins.files.json import (
+    Operation,
     SerializedEntity,
     serialize,
     serialize_for_resource,
@@ -105,7 +106,7 @@ a = Test(
         ),
     ],
     path=".",
-    operation="replace",
+    operation=files::replace,
     resource=files::json::JsonResource(),
 )
 """
@@ -115,7 +116,7 @@ a = Test(
     instance = project.get_instances("__config__::Test")[0]
     assert serialize(instance) == SerializedEntity(
         path=".",
-        operation="replace",
+        operation=Operation.REPLACE,
         value={
             "name": "test",
             "count": 0,
@@ -190,7 +191,7 @@ a = Test(
             ),
         ],
         resource=res_a,
-        operation="replace",
+        operation=files::replace,
     ),
     optional=OptionalEmbeddedTest(
         name="optional",
@@ -207,7 +208,7 @@ a = Test(
         ),
     ],
     path=".",
-    operation="merge",
+    operation=files::merge,
     resource=res_b,
 )
 """
@@ -223,7 +224,7 @@ a = Test(
         res_a,
     ) == [
         SerializedEntity(
-            operation="replace",
+            operation=Operation.REPLACE,
             path="required",
             value={
                 "attr": {},
@@ -250,7 +251,7 @@ a = Test(
             },
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="many[name=a]",
             value={
                 "count": 0,
@@ -265,7 +266,7 @@ a = Test(
         res_b,
     ) == [
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path=".",
             value={
                 "attr": {},
@@ -275,7 +276,7 @@ a = Test(
             },
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="optional",
             value={
                 "attr": {},
@@ -284,7 +285,7 @@ a = Test(
             },
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="many[name=b]",
             value={
                 "attr": {},
@@ -315,7 +316,7 @@ a = Test(
             ),
         ],
         resource=res_a,
-        operation="remove",
+        operation=files::remove,
     ),
     optional=OptionalEmbeddedTest(
         name="optional",
@@ -328,7 +329,7 @@ a = Test(
                     resource=res_b,
                 ),
                 resource=res_a,
-                operation="remove",
+                operation=files::remove,
             ),
         ],
     ),
@@ -343,7 +344,7 @@ a = Test(
         ),
     ],
     path=".",
-    operation="merge",
+    operation=files::merge,
     resource=res_b,
 )
 """
@@ -359,17 +360,17 @@ a = Test(
         res_a,
     ) == [
         SerializedEntity(
-            operation="remove",
+            operation=Operation.REMOVE,
             path=r"optional.recursive[name=\0]",
             value=None,
         ),
         SerializedEntity(
-            operation="remove",
+            operation=Operation.REMOVE,
             path="required",
             value=None,
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="many[name=a]",
             value={
                 "count": 0,
@@ -384,7 +385,7 @@ a = Test(
         res_b,
     ) == [
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path=".",
             value={
                 "attr": {},
@@ -394,7 +395,7 @@ a = Test(
             },
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="optional",
             value={
                 "attr": {},
@@ -403,12 +404,12 @@ a = Test(
             },
         ),
         SerializedEntity(
-            operation="remove",
+            operation=Operation.REMOVE,
             path=r"optional.recursive[name=\0].recursive[name=a]",
             value=None,
         ),
         SerializedEntity(
-            operation="merge",
+            operation=Operation.MERGE,
             path="many[name=b]",
             value={
                 "attr": {},

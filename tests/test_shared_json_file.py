@@ -57,7 +57,7 @@ def test_model(
             values=[
                 files::json::Object(
                     path="people[name=bob]",
-                    operation="replace",
+                    operation=files::replace,
                     value={{"name": "bob", "age": 20}},
                 ),
             ],
@@ -77,7 +77,7 @@ def test_model(
             values=[
                 files::json::Object(
                     path="people[name=alice]",
-                    operation="merge",
+                    operation=files::merge,
                     value={{"name": "alice", "age": 20}},
                 ),
             ],
@@ -97,7 +97,7 @@ def test_model(
             values=[
                 files::json::Object(
                     path="people[name=eve]",
-                    operation="remove",
+                    operation=files::remove,
                     value={{}},
                 ),
             ],
