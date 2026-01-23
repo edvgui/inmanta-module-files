@@ -17,16 +17,15 @@ Contact: edvgui@gmail.com
 """
 
 import base64
+import logging
 import pathlib
 import uuid
-import logging
 
-from inmanta.plugins import plugin
-from inmanta.references import Reference, reference, ArgumentTypes
 from inmanta.agent.handler import LoggerABC, PythonLogger
 from inmanta.export import hash_file
+from inmanta.plugins import plugin
 from inmanta.protocol.endpoints import SyncClient
-
+from inmanta.references import ArgumentTypes, Reference, reference
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +61,9 @@ class TextFileContentReference(Reference[str]):
             file_hash = self.resolve_other(self.file_hash, logger)
             response = SyncClient("agent").get_file(file_hash)
             if response.code != 200 or not response.result:
-                raise RuntimeError(f"Failed to get file from server ({response.code}): {response.result}")
+                raise RuntimeError(
+                    f"Failed to get file from server ({response.code}): {response.result}"
+                )
 
             return base64.b64decode(response.result["content"]).decode()
 
@@ -71,7 +72,9 @@ class TextFileContentReference(Reference[str]):
             file_path = self.resolve_other(self.file_path, logger)
             return pathlib.Path(file_path).read_text()
 
-        raise ValueError("Invalid reference, either the file_path or the file_hash should be provided")
+        raise ValueError(
+            "Invalid reference, either the file_path or the file_hash should be provided"
+        )
 
     def serialize_arguments(self) -> tuple[uuid.UUID, list[ArgumentTypes]]:
         """
@@ -82,7 +85,9 @@ class TextFileContentReference(Reference[str]):
             # Upload the file to the api, then save its hash into this reference
             # attributes
             if self.file_path is None:
-                raise ValueError("The file_path must be provided when the file_hash is not set")
+                raise ValueError(
+                    "The file_path must be provided when the file_hash is not set"
+                )
 
             file_path = self.resolve_other(self.file_path, PythonLogger(LOGGER))
             file_content = pathlib.Path(file_path).read_text()
@@ -91,13 +96,19 @@ class TextFileContentReference(Reference[str]):
             client = SyncClient("compiler")
             stats_result = client.stat_files(files=[file_hash])
             if stats_result.code != 200:
-                raise RuntimeError(f"Unable to check status of files at server ({stats_result.code}): {stats_result.result}")
+                raise RuntimeError(
+                    f"Unable to check status of files at server ({stats_result.code}): {stats_result.result}"
+                )
 
             missing = file_hash in stats_result.result["files"]
             if missing:
-                upload_result = client.upload_file(id=file_hash, content=base64.b64encode(file_content).decode("ascii"))
+                upload_result = client.upload_file(
+                    id=file_hash, content=base64.b64encode(file_content).decode("ascii")
+                )
                 if upload_result.code != 200:
-                    raise RuntimeError(f"Unable to upload file to the server ({upload_result.code}): {upload_result.result}")
+                    raise RuntimeError(
+                        f"Unable to upload file to the server ({upload_result.code}): {upload_result.result}"
+                    )
 
             # The file exists on the server, next time this reference is resolved, it
             # should do it using the server
@@ -110,7 +121,9 @@ class TextFileContentReference(Reference[str]):
 
 
 @plugin
-def create_text_file_content_reference(file_path: str | Reference[str]) -> TextFileContentReference:
+def create_text_file_content_reference(
+    file_path: str | Reference[str],
+) -> TextFileContentReference:
     """
     Create a reference to the content of a file, which can be consumed either
     by the agent or the compiler.  To share the content of the file with the

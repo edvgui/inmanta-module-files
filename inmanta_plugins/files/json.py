@@ -781,7 +781,7 @@ class JsonFileHandler(inmanta_plugins.files.base.BaseFileHandler[JsonFileResourc
         value: dict,
         *,
         format: typing.Literal["json", "yaml"],
-        indent: typing.Optional[int] = None,
+        indent: int | None = None,
         sort_keys: bool | None = None,
         named_list: str | None = None,
     ) -> str:
