@@ -2,6 +2,7 @@
 
 ## v2.7.0 - ?
 
+- Add files::create_text_file_content_reference to pass the content of text files to resources desired states using the file api
 - Add files::create_text_reference to pass long strings to resources desired states using the file api
 
 ## v2.6.0 - 2025-12-15
