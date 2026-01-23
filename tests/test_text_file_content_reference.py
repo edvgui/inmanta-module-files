@@ -30,6 +30,7 @@ def test_model(
     content: str = "test",
 ) -> None:
     source_file = pathlib.Path(project._test_project_dir, "files/test.txt")
+    source_file.parent.mkdir(parents=True, exist_ok=True)
     source_file.write_text(content)
 
     user = os.getlogin()

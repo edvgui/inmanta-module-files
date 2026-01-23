@@ -21,6 +21,8 @@ import logging
 import pathlib
 import uuid
 
+from inmanta_plugins.config import resolve_path
+
 from inmanta.agent.handler import LoggerABC, PythonLogger
 from inmanta.export import hash_file
 from inmanta.plugins import plugin
@@ -103,7 +105,8 @@ class TextFileContentReference(Reference[str]):
             missing = file_hash in stats_result.result["files"]
             if missing:
                 upload_result = client.upload_file(
-                    id=file_hash, content=base64.b64encode(file_content).decode("ascii")
+                    id=file_hash,
+                    content=base64.b64encode(file_content.encode()).decode("ascii"),
                 )
                 if upload_result.code != 200:
                     raise RuntimeError(
@@ -135,4 +138,4 @@ def create_text_file_content_reference(
     :param file_path: The file to the path in the current filesystem whose content
         should be accessed when the reference is resolved.
     """
-    return TextFileContentReference(file_path, None)
+    return TextFileContentReference(resolve_path(file_path), None)
