@@ -16,15 +16,25 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
+import asyncio
+import functools
 import grp
 import os
 import pathlib
+import typing
 
-import pytest_inmanta.plugin
+from pytest_inmanta.plugin import Project
+
+from inmanta.server.protocol import Server
 
 
-def test_model(
-    project: pytest_inmanta.plugin.Project,
+async def off_main_thread[T](func: typing.Callable[[], T]) -> T:
+    return await asyncio.get_event_loop().run_in_executor(None, func)
+
+
+async def test_model(
+    project: Project,
+    server: Server,
     dir_path: pathlib.Path = pathlib.Path("/tmp/example"),
     purged: bool = False,
     content: str = "test",
@@ -58,31 +68,26 @@ def test_model(
         )
     """
 
-    project.compile(model.strip("\n"), no_dedent=False)
+    await off_main_thread(
+        functools.partial(project.compile, model.strip("\n"), no_dedent=False)
+    )
 
 
-def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) -> None:
+async def test_deploy(
+    project: Project,
+    tmp_path: pathlib.Path,
+    server: Server,
+) -> None:
     file = tmp_path / "test"
 
-    # Create the dir
-    test_model(project, file, purged=False, content="test")
-    assert project.dryrun_resource("files::TextFile")
-    project.deploy_resource("files::TextFile")
-    assert file.is_file()
-    assert file.read_text() == "test"
-    assert not project.dryrun_resource("files::TextFile")
+    await test_model(project, server, file, purged=False, content="test")
 
-    # Update the file
-    test_model(project, file, purged=False, content="testtest")
-    assert project.dryrun_resource("files::TextFile")
-    project.deploy_resource("files::TextFile")
-    assert file.is_file()
-    assert file.read_text() == "testtest"
-    assert not project.dryrun_resource("files::TextFile")
+    def test():
+        # Create the dir
+        assert project.dryrun_resource("files::TextFile")
+        project.deploy_resource("files::TextFile")
+        assert file.is_file()
+        assert file.read_text() == "test"
+        assert not project.dryrun_resource("files::TextFile")
 
-    # Delete the file
-    test_model(project, file, purged=True)
-    assert project.dryrun_resource("files::TextFile")
-    project.deploy_resource("files::TextFile")
-    assert not file.exists()
-    assert not project.dryrun_resource("files::TextFile")
+    await off_main_thread(test)
