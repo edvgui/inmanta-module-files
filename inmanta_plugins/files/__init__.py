@@ -46,6 +46,96 @@ def path_join(base_path: str, *extra: str) -> str:
     return str(pathlib.Path(base_path, *extra))
 
 
+@reference("files::TextReference")
+class TextReference(Reference[str]):
+    def __init__(
+        self,
+        text: str | Reference[str] | None,
+        hash: str | Reference[str] | None,
+    ):
+        super().__init__()
+        self.text = text
+        self.hash = hash
+
+    def resolve(self, logger: LoggerABC) -> str:
+        if self.hash is not None:
+            # Resolve from file api
+            hash = self.resolve_other(self.hash, logger)
+            response = SyncClient("agent").get_file(hash)
+            if response.code != 200 or not response.result:
+                raise RuntimeError(
+                    f"Failed to get file from server ({response.code}): {response.result}"
+                )
+
+            return base64.b64decode(response.result["content"]).decode()
+
+        if self.text is not None:
+            # Resolve from local file system
+            return self.resolve_other(self.text, logger)
+
+        raise ValueError(
+            "Invalid reference, either the file_path or the file_hash should be provided"
+        )
+
+    def serialize_arguments(self) -> tuple[uuid.UUID, list[ArgumentTypes]]:
+        """
+        Override parent implementation, to upload file content to the server
+        and return a hash-based reference instead.
+        """
+        if self.hash is None:
+            # Upload the file to the api, then save its hash into this reference
+            # attributes
+            if self.text is None:
+                raise ValueError("The text must be provided when the hash is not set")
+
+            text = self.resolve_other(self.text, PythonLogger(LOGGER))
+            hash = hash_file(text.encode())
+
+            client = SyncClient("compiler")
+            stats_result = client.stat_files(files=[hash])
+            if stats_result.code != 200:
+                raise RuntimeError(
+                    f"Unable to check status of files at server ({stats_result.code}): {stats_result.result}"
+                )
+
+            missing = hash in stats_result.result["files"]
+            if missing:
+                upload_result = client.upload_file(
+                    id=hash,
+                    content=base64.b64encode(text.encode()).decode("ascii"),
+                )
+                if upload_result.code != 200:
+                    raise RuntimeError(
+                        f"Unable to upload file to the server ({upload_result.code}): {upload_result.result}"
+                    )
+
+            # The file exists on the server, next time this reference is resolved, it
+            # should do it using the server
+            self.hash = hash
+            self.text = None
+
+        # Now that we have the file available in the api, delegate serialization
+        # to the parent class
+        return super().serialize_arguments()
+
+
+@plugin
+def create_text_reference(
+    text: str | Reference[str],
+) -> TextReference:
+    """
+    Create a reference to a text, preferably long, which can be consumed either
+    by the agent or the compiler.  To share this long text with the agent, the
+    instead of storing the full text in the serialized reference.
+    During reference serialization (during resource export), the text is uploaded
+    to the server.  When the reference is resolved on the server side the text is
+    pulled from the files api.
+
+    :param text: The textual content should be accessed when the reference is resolved.
+    """
+    return TextReference(text, None)
+
+
 @reference("files::TextFileContentReference")
 class TextFileContentReference(Reference[str]):
     def __init__(
