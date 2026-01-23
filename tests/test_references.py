@@ -32,7 +32,44 @@ async def off_main_thread[T](func: typing.Callable[[], T]) -> T:
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
-async def test_model(
+async def test_text_model(
+    project: Project,
+    server: Server,
+    dir_path: pathlib.Path = pathlib.Path("/tmp/example"),
+    purged: bool = False,
+    content: str = "test",
+) -> None:
+    user = os.getlogin()
+    group = grp.getgrgid(os.getgid()).gr_name
+    model = f"""
+        import mitogen
+        import files
+        import files::host
+
+        import std
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        files::TextFile(
+            host=host,
+            path={repr(str(dir_path))},
+            owner={repr(user)},
+            group={repr(group)},
+            purged={str(purged).lower()},
+            content=files::create_text_reference({repr(content)}),
+        )
+    """
+
+    await off_main_thread(
+        functools.partial(project.compile, model.strip("\n"), no_dedent=False)
+    )
+
+
+async def test_text_file_content_model(
     project: Project,
     server: Server,
     dir_path: pathlib.Path = pathlib.Path("/tmp/example"),
@@ -80,8 +117,6 @@ async def test_deploy(
 ) -> None:
     file = tmp_path / "test"
 
-    await test_model(project, server, file, purged=False, content="test")
-
     def test():
         # Create the dir
         assert project.dryrun_resource("files::TextFile")
@@ -90,4 +125,12 @@ async def test_deploy(
         assert file.read_text() == "test"
         assert not project.dryrun_resource("files::TextFile")
 
+    await test_text_model(project, server, file, purged=False, content="test")
+    await off_main_thread(test)
+
+    file.unlink()
+
+    await test_text_file_content_model(
+        project, server, file, purged=False, content="test"
+    )
     await off_main_thread(test)
