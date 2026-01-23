@@ -5,11 +5,11 @@ flake8 = flake8 inmanta_plugins tests inmanta_files
 pyupgrade = pyupgrade --py312-plus $$(find inmanta_plugins tests inmanta_files -type f -name '*.py')
 
 format:
-	uv run $(isort)
-	uv run $(black_preview)
-	uv run $(black)
-	uv run $(flake8)
-	uv run $(pyupgrade)
+	$(isort)
+	$(black_preview)
+	$(black)
+	$(flake8)
+	$(pyupgrade)
 
 install:
 	uv pip install -U -r requirements.dev.txt -c requirements.txt -e .
