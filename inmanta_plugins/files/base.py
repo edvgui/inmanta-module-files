@@ -29,9 +29,9 @@ class BaseFileResource(
 ):
     fields = ("path", "permissions", "owner", "group")
     path: str
-    permissions: typing.Optional[int]
-    owner: typing.Optional[str]
-    group: typing.Optional[str]
+    permissions: int | None
+    owner: str | None
+    group: str | None
 
 
 X = typing.TypeVar("X", bound=BaseFileResource)
