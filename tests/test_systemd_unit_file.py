@@ -47,9 +47,7 @@ Type=forking
 [Install]
 WantedBy=default.target
 
-""".lstrip(
-    "\n"
-)
+""".lstrip("\n")
 
 
 @pytest.mark.parametrize(

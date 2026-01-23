@@ -29,8 +29,9 @@ jobs:
 
       - name: Lint with flake8
         run: |
-          uv run flake8 tests inmanta_plugins inmanta_files
-          uv run pyupgrade --py312-plus $(find inmanta_plugins tests inmanta_files -type f -name '*.py')
+          uv venv
+          flake8 tests inmanta_plugins inmanta_files
+          pyupgrade --py312-plus $(find inmanta_plugins tests inmanta_files -type f -name '*.py')
 
   tests:
 
@@ -55,5 +56,6 @@ jobs:
 
       - name: Run tests
         run: |
+          uv venv
           echo $UID > /proc/self/loginuid
-          uv run pytest tests -vvv --log-cli-level debug
+          pytest tests -vvv --log-cli-level debug
