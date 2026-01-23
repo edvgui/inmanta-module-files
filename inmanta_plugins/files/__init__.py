@@ -140,7 +140,7 @@ def create_text_reference(
 class TextFileContentReference(Reference[str]):
     def __init__(
         self,
-        file_path: str | Reference[str] | None,
+        file_path: str | Reference[str],
         file_hash: str | Reference[str] | None,
     ):
         super().__init__()
@@ -206,7 +206,6 @@ class TextFileContentReference(Reference[str]):
             # The file exists on the server, next time this reference is resolved, it
             # should do it using the server
             self.file_hash = file_hash
-            self.file_path = None
 
         # Now that we have the file available in the api, delegate serialization
         # to the parent class
