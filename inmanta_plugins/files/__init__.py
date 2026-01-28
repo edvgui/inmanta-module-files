@@ -17,6 +17,7 @@ Contact: edvgui@gmail.com
 """
 
 import base64
+import functools
 import logging
 import pathlib
 import uuid
@@ -136,6 +137,24 @@ def create_text_reference(
     return TextReference(text, None)
 
 
+@functools.lru_cache
+def get_file(hash: str) -> bytes:
+    """
+    Get the file with the given hash from the api.  The result of the
+    function is cached so that multiple calls with the same hash don't
+    need to reach the server.
+
+    :param hash: The hash of the file we want to retrieve
+    """
+    response = SyncClient("agent").get_file(hash)
+    if response.code != 200 or not response.result:
+        raise RuntimeError(
+            f"Failed to get file from server ({response.code}): {response.result}"
+        )
+
+    return base64.b64decode(response.result["content"])
+
+
 @reference("files::TextFileContentReference")
 class TextFileContentReference(Reference[str]):
     def __init__(
@@ -151,16 +170,12 @@ class TextFileContentReference(Reference[str]):
         if self.file_hash is not None:
             # Resolve from file api
             file_hash = self.resolve_other(self.file_hash, logger)
-            response = SyncClient("agent").get_file(file_hash)
-            if response.code != 200 or not response.result:
-                raise RuntimeError(
-                    f"Failed to get file from server ({response.code}): {response.result}"
-                )
-
-            return base64.b64decode(response.result["content"]).decode()
+            return get_file(file_hash).decode()
 
         if self.file_path is not None:
-            # Resolve from local file system
+            # Resolve from local file system, in case the reference is
+            # resolved in the context of a compile and the file hasn't
+            # been uploaded yet
             file_path = self.resolve_other(self.file_path, logger)
             return pathlib.Path(file_path).read_text()
 
