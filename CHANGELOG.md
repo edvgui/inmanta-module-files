@@ -2,6 +2,7 @@
 
 ## v2.7.1 - ?
 
+- Make sure that all references within the same executor/process pointing to the same file download it only once
 
 ## v2.7.0 - 2026-01-23
 
