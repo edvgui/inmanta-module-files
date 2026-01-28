@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.7.2 - ?
+
+
 ## v2.7.1 - 2026-01-28
 
 - Make sure that all references within the same executor/process pointing to the same file download it only once
