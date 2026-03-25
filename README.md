@@ -17,7 +17,7 @@ This module allows to manage files, on a unix host.  It contains the following r
 
 ## Example
 
-The following example makes sure that the directory `/tmp/test/a` exists, and creates a text file in it.
+The following example makes sure that the directory `/example/folder/a` exists, and creates a text file in it.
 
 <x-example-simple>
 
@@ -36,7 +36,7 @@ host = std::Host(
 dir = files::Directory(
     host=host,
     path="/example/folder/a",
-    # The directory that is managed is /tmp/test/a, but the resource
+    # The directory that is managed is /example/folder/a, but the resource
     # will also make sure that any of its parent directories exists as well
     create_parents=true,
 )

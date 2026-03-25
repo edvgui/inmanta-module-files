@@ -70,7 +70,7 @@ def test_simple(
         dir = files::Directory(
             host=host,
             path="{tmp_path}/a",
-            # The directory that is managed is /tmp/test/a, but the resource
+            # The directory that is managed is {tmp_path}/a, but the resource
             # will also make sure that any of its parent directories exists as well
             create_parents=true,
         )
