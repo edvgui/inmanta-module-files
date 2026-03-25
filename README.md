@@ -36,7 +36,7 @@ host = std::Host(
 dir = files::Directory(
     host=host,
     path="/example/folder/a",
-    # The directory that is managed is /tmp/test/a, but the resource
+    # The directory that is managed is /example/folder/a, but the resource
     # will also make sure that any of its parent directories exists as well
     create_parents=true,
 )
