@@ -102,7 +102,7 @@ class BaseFileHandler(inmanta_plugins.mitogen.abc.HandlerABC[X]):
 
 
 @dependency_manager
-def dir_before_file(model: ModelDict, resources: ResourceDict):
+def dir_before_file(model: ModelDict, resources: ResourceDict) -> None:
     """
     If a file/symlink/directory is defined on a host, then make it depend on its parent directory
     cf. https://code.inmanta.com/solutions/modules/fs/-/blob/d5425be42af4ccd9f8be0316bcbd6fad47548fd8/inmanta_plugins/fs/resources.py#L367

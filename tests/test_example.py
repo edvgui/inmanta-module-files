@@ -16,11 +16,7 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
-import asyncio
-import grp
-import os
 import pathlib
-import typing
 
 from pytest_inmanta.plugin import Project
 
@@ -97,7 +93,7 @@ def test_simple(
     file = project.get_resource("files::TextFile")
     assert file is not None
     assert dir.id in file.requires
-    
+
     tested_model = pathlib.Path(project._test_project_dir, "main.cf").read_text()
     tested_model = tested_model.replace(str(tmp_path), "/example/folder")
     update_example("simple", tested_model)
