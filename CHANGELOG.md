@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.7.2 - ?
+## v2.8.0 - ?
 
+- Enable automatic dependency wiring between all resources of this module
 
 ## v2.7.1 - 2026-01-28
 

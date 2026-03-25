@@ -18,6 +18,9 @@ This module allows to manage files, on a unix host.  It contains the following r
 ## Example
 
 The following example makes sure that the directory `/tmp/test/a` exists, and creates a text file in it.
+
+<x-example-simple>
+
 ```
 import mitogen
 import files
@@ -32,7 +35,7 @@ host = std::Host(
 
 dir = files::Directory(
     host=host,
-    path="/tmp/test/a",
+    path="/example/folder/a",
     # The directory that is managed is /tmp/test/a, but the resource
     # will also make sure that any of its parent directories exists as well
     create_parents=true,
@@ -42,7 +45,13 @@ file = files::TextFile(
     host=host,
     path=f"{dir.path}/file.txt",
     content="test",
-    # The file requires the directory to be created first
-    requires=[dir],
+    # No need to explicitly add the dependency to the parent, the
+    # exporter takes care of adding it
+    # requires=dir,
 )
+
 ```
+
+</x-example-simple>
+
+Find more examples in the ´tests` folder of this module!
