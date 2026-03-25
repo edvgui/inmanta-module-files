@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.8.0 - ?
+## v2.8.0 - 2026-03-25
 
 - Enable automatic dependency wiring between all resources of this module
 
