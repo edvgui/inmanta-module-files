@@ -17,7 +17,7 @@ This module allows to manage files, on a unix host.  It contains the following r
 
 ## Example
 
-The following example makes sure that the directory `/tmp/test/a` exists, and creates a text file in it.
+The following example makes sure that the directory `/example/folder/a` exists, and creates a text file in it.
 
 <x-example-simple>
 
