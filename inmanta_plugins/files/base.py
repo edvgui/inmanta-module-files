@@ -16,12 +16,15 @@ limitations under the License.
 Contact: edvgui@gmail.com
 """
 
+import collections
+import os
 import typing
 
 import inmanta_plugins.mitogen.abc
 
 import inmanta.agent.handler
 import inmanta.resources
+from inmanta.export import ModelDict, ResourceDict, dependency_manager
 
 
 class BaseFileResource(
@@ -96,3 +99,68 @@ class BaseFileHandler(inmanta_plugins.mitogen.abc.HandlerABC[X]):
     ) -> None:
         self.proxy.remove(resource.path)
         ctx.set_purged()
+
+
+@dependency_manager
+def dir_before_file(model: ModelDict, resources: ResourceDict):
+    """
+    If a file/symlink/directory is defined on a host, then make it depend on its parent directory
+    cf. https://code.inmanta.com/solutions/modules/fs/-/blob/d5425be42af4ccd9f8be0316bcbd6fad47548fd8/inmanta_plugins/fs/resources.py#L367
+    """
+    from inmanta_plugins.files.directory import DirectoryResource
+    from inmanta_plugins.files.symlink import SymlinkResource
+
+    # Use plain strings with os.path instead of pathlib.Path objects.
+    # The pathlib-based approach created millions of Path objects and used
+    # `Path(dir) in path.parents` which iterates all parents with expensive
+    # __eq__ comparisons involving string normalization on every call.
+    # String prefix matching with os.path.normpath is O(1) per check.
+    per_host: dict[str, list[tuple[str, BaseFileResource]]] = collections.defaultdict(
+        list
+    )
+    per_host_dirs: dict[str, list[tuple[str, DirectoryResource]]] = (
+        collections.defaultdict(list)
+    )
+    for resource in resources.values():
+        match resource:
+            case DirectoryResource():
+                dir_path = os.path.normpath(resource.path)
+                per_host_dirs[resource.model.host].append((dir_path + os.sep, resource))
+                per_host[resource.model.host].append(
+                    (os.path.normpath(resource.path), resource)
+                )
+            case SymlinkResource():
+                per_host[resource.model.host].append(
+                    (os.path.normpath(resource.path), resource)
+                )
+                per_host[resource.model.host].append(
+                    (os.path.normpath(resource.target), resource)
+                )
+            case BaseFileResource():
+                per_host[resource.model.host].append(
+                    (os.path.normpath(resource.path), resource)
+                )
+            case _:
+                pass
+
+    # now add deps per host
+    for host, files in per_host.items():
+        for file_path, hfile in files:
+            for dir_prefix, pdir in per_host_dirs[host]:
+                if file_path.startswith(dir_prefix):
+                    if pdir.purged:
+                        if hfile.purged:
+                            # The folder is purged, and so is the file, the file should be
+                            # cleaned up first, then the folder can be.
+                            # This is not required as the folder would have cleaned the file,
+                            # but it is also not wrong
+                            pdir.requires.add(hfile)
+                        else:
+                            # Trying to create a file in a purged folder, this can not work
+                            raise RuntimeError(
+                                f"Directory {pdir.id} is purged but a resource is trying to "
+                                f"deploy something in it: {hfile.id}"
+                            )
+                    else:
+                        # Make the File resource require the directory
+                        hfile.requires.add(pdir)
