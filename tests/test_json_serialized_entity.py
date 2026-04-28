@@ -224,6 +224,15 @@ a = Test(
         res_a,
     ) == [
         SerializedEntity(
+            operation=Operation.MERGE,
+            path="many[name=a]",
+            value={
+                "count": 0,
+                "flag": False,
+                "name": "a",
+            },
+        ),
+        SerializedEntity(
             operation=Operation.REPLACE,
             path="required",
             value={
@@ -250,15 +259,6 @@ a = Test(
                 ],
             },
         ),
-        SerializedEntity(
-            operation=Operation.MERGE,
-            path="many[name=a]",
-            value={
-                "count": 0,
-                "flag": False,
-                "name": "a",
-            },
-        ),
     ]
 
     assert serialize_for_resource(
@@ -277,21 +277,21 @@ a = Test(
         ),
         SerializedEntity(
             operation=Operation.MERGE,
-            path="optional",
-            value={
-                "attr": {},
-                "count": 0,
-                "name": "optional",
-            },
-        ),
-        SerializedEntity(
-            operation=Operation.MERGE,
             path="many[name=b]",
             value={
                 "attr": {},
                 "count": 0,
                 "flag": False,
                 "name": "b",
+            },
+        ),
+        SerializedEntity(
+            operation=Operation.MERGE,
+            path="optional",
+            value={
+                "attr": {},
+                "count": 0,
+                "name": "optional",
             },
         ),
     ]
@@ -360,6 +360,15 @@ a = Test(
         res_a,
     ) == [
         SerializedEntity(
+            operation=Operation.MERGE,
+            path="many[name=a]",
+            value={
+                "count": 0,
+                "flag": False,
+                "name": "a",
+            },
+        ),
+        SerializedEntity(
             operation=Operation.REMOVE,
             path=r"optional.recursive[name=\0]",
             value=None,
@@ -368,15 +377,6 @@ a = Test(
             operation=Operation.REMOVE,
             path="required",
             value=None,
-        ),
-        SerializedEntity(
-            operation=Operation.MERGE,
-            path="many[name=a]",
-            value={
-                "count": 0,
-                "flag": False,
-                "name": "a",
-            },
         ),
     ]
 
@@ -396,6 +396,16 @@ a = Test(
         ),
         SerializedEntity(
             operation=Operation.MERGE,
+            path="many[name=b]",
+            value={
+                "attr": {},
+                "count": 0,
+                "flag": False,
+                "name": "b",
+            },
+        ),
+        SerializedEntity(
+            operation=Operation.MERGE,
             path="optional",
             value={
                 "attr": {},
@@ -407,15 +417,5 @@ a = Test(
             operation=Operation.REMOVE,
             path=r"optional.recursive[name=\0].recursive[name=a]",
             value=None,
-        ),
-        SerializedEntity(
-            operation=Operation.MERGE,
-            path="many[name=b]",
-            value={
-                "attr": {},
-                "count": 0,
-                "flag": False,
-                "name": "b",
-            },
         ),
     ]

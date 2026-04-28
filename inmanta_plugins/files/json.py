@@ -528,7 +528,10 @@ def serialize_for_resource(
                         ),
                     )
 
-            return [s for s in serialized if s is not None]
+            return sorted(
+                [s for s in serialized if s is not None],
+                key=lambda s: s.path,
+            )
 
     if current_operation == Operation.MERGE:
         # For a merge operation, we might share a part of the tree with any
@@ -558,7 +561,10 @@ def serialize_for_resource(
                     ),
                 )
 
-        return [s for s in serialized if s is not None]
+        return sorted(
+            [s for s in serialized if s is not None],
+            key=lambda s: s.path,
+        )
 
     raise ValueError(f"Unexpected operation: {current_operation}")
 
@@ -700,25 +706,31 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
                     f"all paths must start with {path_prefix}"
                 )
 
-        return [
-            {
-                "path": validate_path(value.path),
-                "operation": value.operation,
-                "value": value.value,
-            }
-            for value in entity.values
-        ]
+        return sorted(
+            [
+                {
+                    "path": validate_path(value.path),
+                    "operation": value.operation,
+                    "value": value.value,
+                }
+                for value in entity.values
+            ],
+            key=lambda d: d["path"],
+        )
 
     @classmethod
     def get_discovered_values(
         cls, _, entity: inmanta.execute.proxy.DynamicProxy
     ) -> list[dict]:
-        return [
-            {
-                "path": value.path,
-            }
-            for value in entity.discovered_values
-        ]
+        return sorted(
+            [
+                {
+                    "path": value.path,
+                }
+                for value in entity.discovered_values
+            ],
+            key=lambda d: d["path"],
+        )
 
 
 @inmanta.resources.resource(

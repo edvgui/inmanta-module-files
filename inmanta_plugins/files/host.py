@@ -114,17 +114,20 @@ class HostFileResource(inmanta_plugins.files.base.BaseFileResource):
         _: inmanta.export.Exporter,
         entity: inmanta.execute.proxy.DynamicProxy,
     ) -> list[dict]:
-        return [
-            {
-                "path": str(dict_path.InDict(entry.hostname)),
-                "operation": entry.operation,
-                "value": {
-                    "address4": entry.address4,
-                    "address6": entry.address6,
-                },
-            }
-            for entry in entity.entries
-        ]
+        return sorted(
+            [
+                {
+                    "path": str(dict_path.InDict(entry.hostname)),
+                    "operation": entry.operation,
+                    "value": {
+                        "address4": entry.address4,
+                        "address6": entry.address6,
+                    },
+                }
+                for entry in entity.entries
+            ],
+            key=lambda d: d["path"],
+        )
 
 
 @inmanta.resources.resource(

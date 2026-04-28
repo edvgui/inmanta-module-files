@@ -2,6 +2,7 @@
 
 ## v2.8.1 - ?
 
+- Stabilize serialization of files::JsonFile and files::HostFile resources.
 
 ## v2.8.0 - 2026-03-25
 
