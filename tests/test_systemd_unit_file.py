@@ -50,6 +50,24 @@ WantedBy=default.target
 """.lstrip("\n")
 
 
+EXAMPLE_MOUNT_UNIT = """
+[Unit]
+Description=TrueNAS Immich NFS Mount
+Wants=network-online.target
+After=network-online.target
+
+[Mount]
+What=NAS_IP:/mnt/{POOL}/{DATASET}
+Where=/mnt/some/folder
+Type=nfs
+Options=rw,_netdev,noatime,vers=4.2
+
+[Install]
+WantedBy=multi-user.target
+
+""".lstrip("\n")
+
+
 @pytest.mark.parametrize(
     (
         "file_path",
@@ -131,6 +149,81 @@ def test_deploy(project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path) 
 
     # Delete the file
     test_model(project, file, purged=True)
+    assert project.dryrun_resource("files::SystemdUnitFile")
+    project.deploy_resource("files::SystemdUnitFile")
+    assert not project.dryrun_resource("files::SystemdUnitFile")
+    assert not file.exists()
+
+
+@pytest.mark.parametrize(
+    (
+        "file_path",
+        "purged",
+    ),
+    [
+        (pathlib.Path("/tmp/example.mount"), False),
+    ],
+)
+def test_mount_model(
+    project: pytest_inmanta.plugin.Project, file_path: pathlib.Path, purged: bool
+) -> None:
+    user = os.getlogin()
+    group = grp.getgrgid(os.getgid()).gr_name
+    model = f"""
+        import mitogen
+        import files
+        import files::systemd_unit
+
+        import std
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        files::SystemdUnitFile(
+            host=host,
+            path={repr(str(file_path))},
+            owner={repr(user)},
+            group={repr(group)},
+            purged={str(purged).lower()},
+            unit=Unit(
+                description="TrueNAS Immich NFS Mount",
+                wants=["network-online.target"],
+                after=["network-online.target"],
+            ),
+            mount=Mount(
+                what="NAS_IP:/mnt/{{POOL}}/{{DATASET}}",
+                where="/mnt/some/folder",
+                type="nfs",
+                options="rw,_netdev,noatime,vers=4.2",
+            ),
+            install=Install(
+                wanted_by=["multi-user.target"],
+            ),
+        )
+    """  # noqa: E501
+
+    project.compile(model.strip("\n"), no_dedent=False)
+
+
+def test_mount_deploy(
+    project: pytest_inmanta.plugin.Project, tmp_path: pathlib.Path
+) -> None:
+    file = tmp_path / "mnt-some-folder.mount"
+
+    # Create the file
+    test_mount_model(project, file, purged=False)
+    assert project.dryrun_resource("files::SystemdUnitFile")
+    project.deploy_resource("files::SystemdUnitFile")
+    assert not project.dryrun_resource("files::SystemdUnitFile")
+
+    # Check that the file content is the expected one
+    assert file.read_text() == EXAMPLE_MOUNT_UNIT
+
+    # Delete the file
+    test_mount_model(project, file, purged=True)
     assert project.dryrun_resource("files::SystemdUnitFile")
     project.deploy_resource("files::SystemdUnitFile")
     assert not project.dryrun_resource("files::SystemdUnitFile")
