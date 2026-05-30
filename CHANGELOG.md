@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.8.2 - ?
+## v2.9.0 - ?
 
+- Add support for systemd.mount units
 
 ## v2.8.1 - 2026-04-28
 

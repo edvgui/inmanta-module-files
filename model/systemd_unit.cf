@@ -213,6 +213,46 @@ entity Socket:
 end
 
 
+entity Mount:
+    """
+    A unit configuration file whose name ends in ".mount" encodes information about a file system
+    mount point controlled and supervised by systemd.
+
+    :attr what: Takes an absolute path of a device node, file or other resource to mount. See mount(8)
+        for details. If this refers to a device node, a dependency on the respective device unit is
+        automatically created.
+    :attr where: Takes an absolute path of a directory for the mount point; in particular, this does not
+        have to be a directory that already exists, as systemd will attempt to create it before the
+        mount is performed.
+    :attr type: Takes a string for the file system type. See mount(8) for details.
+    :attr options: Mount options to use when mounting. This takes a comma-separated list of options.
+    :attr sloppy_options: Takes a boolean argument. If true, parsing of the options specified in Options=
+        is relaxed, and unknown mount options are tolerated.
+    :attr lazy_unmount: Takes a boolean argument. If true, detach the filesystem from the filesystem
+        hierarchy at time of the unmount operation, and clean up all references to the filesystem as
+        soon as they are not busy anymore.
+    :attr read_write_only: Takes a boolean argument. If false, a mount point that shall be mounted
+        read-write but cannot be mounted so is retried to be mounted read-only.
+    :attr force_unmount: Takes a boolean argument. If true, force an unmount (in case of an unreachable
+        NFS system).
+    :attr directory_mode: Directories of mount points (and any parent directories) are automatically
+        created if needed. This option specifies the file system access mode used when creating these
+        directories.
+    :attr timeout_sec: Configures the time to wait for the mount command to finish.
+    """
+    string what
+    string where
+    string? type = null
+    string? options = null
+    bool? sloppy_options = null
+    bool? lazy_unmount = null
+    bool? read_write_only = null
+    bool? force_unmount = null
+    string? directory_mode = null
+    int? timeout_sec = null
+end
+
+
 implementation file_content for files::SystemdUnitFile:
     """
     Resolve the content of the unit file, generate it from a jinja template.
@@ -230,4 +270,5 @@ implement Service using std::none
 implement Timer using std::none
 implement Install using std::none
 implement Socket using std::none
+implement Mount using std::none
 implement files::SystemdUnitFile using file_content

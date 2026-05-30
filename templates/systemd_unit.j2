@@ -114,6 +114,37 @@ Service={{ unit_file.socket.service }}
 
 {% endif -%}
 
+{% if unit_file.mount is defined -%}
+[Mount]
+What={{ unit_file.mount.what }}
+Where={{ unit_file.mount.where }}
+{%- if unit_file.mount.type is not none %}
+Type={{ unit_file.mount.type }}
+{%- endif %}
+{%- if unit_file.mount.options is not none %}
+Options={{ unit_file.mount.options }}
+{%- endif %}
+{%- if unit_file.mount.sloppy_options is not none %}
+SloppyOptions={{ unit_file.mount.sloppy_options | string | lower }}
+{%- endif %}
+{%- if unit_file.mount.lazy_unmount is not none %}
+LazyUnmount={{ unit_file.mount.lazy_unmount | string | lower }}
+{%- endif %}
+{%- if unit_file.mount.read_write_only is not none %}
+ReadWriteOnly={{ unit_file.mount.read_write_only | string | lower }}
+{%- endif %}
+{%- if unit_file.mount.force_unmount is not none %}
+ForceUnmount={{ unit_file.mount.force_unmount | string | lower }}
+{%- endif %}
+{%- if unit_file.mount.directory_mode is not none %}
+DirectoryMode={{ unit_file.mount.directory_mode }}
+{%- endif %}
+{%- if unit_file.mount.timeout_sec is not none %}
+TimeoutSec={{ unit_file.mount.timeout_sec }}
+{%- endif %}
+
+{% endif -%}
+
 {%- if unit_file.install is defined -%}
 [Install]
 {%- if unit_file.install.alias is not none %}
