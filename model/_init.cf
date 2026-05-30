@@ -215,6 +215,11 @@ SystemdUnitFile.socket [0:1] -- files::systemd_unit::Socket
 Compose the [socket] section of the file
 """
 
+SystemdUnitFile.mount [0:1] -- files::systemd_unit::Mount
+"""
+Compose the [mount] section of the file
+"""
+
 index SystemdUnitFile(host, path)
 
 implement SystemdUnitFile using std::none
