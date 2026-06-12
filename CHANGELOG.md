@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.9.2 - ?
+
+
 ## v2.9.1 - 2026-06-12
 
 - Defer the upload of files referenced by file/text references to the resource export: compiles no longer require a
