@@ -2,6 +2,8 @@
 
 ## v2.9.1 - ?
 
+- Defer the upload of files referenced by file/text references to the resource export: compiles no longer require a
+  reachable server, identical content is uploaded only once, and the server-side existence check is batched.
 
 ## v2.9.0 - 2026-05-30
 

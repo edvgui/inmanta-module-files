@@ -24,8 +24,8 @@ import uuid
 
 from inmanta_plugins.config import resolve_path
 
+import inmanta_plugins.files.upload
 from inmanta.agent.handler import LoggerABC, PythonLogger
-from inmanta.export import hash_file
 from inmanta.plugins import plugin
 from inmanta.protocol.endpoints import SyncClient
 from inmanta.references import ArgumentTypes, Reference, reference
@@ -60,15 +60,16 @@ class TextReference(Reference[str]):
 
     def resolve(self, logger: LoggerABC) -> str:
         if self.hash is not None:
-            # Resolve from file api
             hash = self.resolve_other(self.hash, logger)
-            response = SyncClient("agent").get_file(hash)
-            if response.code != 200 or not response.result:
-                raise RuntimeError(
-                    f"Failed to get file from server ({response.code}): {response.result}"
-                )
 
-            return base64.b64decode(response.result["content"]).decode()
+            # Resolve from the snapshot collected during this compile, if the
+            # text hasn't been uploaded to the server yet
+            snapshot = inmanta_plugins.files.upload.get_snapshot(hash)
+            if snapshot is not None:
+                return snapshot.decode()
+
+            # Resolve from file api
+            return get_file(hash).decode()
 
         if self.text is not None:
             # Resolve from local file system
@@ -80,42 +81,24 @@ class TextReference(Reference[str]):
 
     def serialize_arguments(self) -> tuple[uuid.UUID, list[ArgumentTypes]]:
         """
-        Override parent implementation, to upload file content to the server
-        and return a hash-based reference instead.
+        Override parent implementation, to register the text for upload to the
+        server and return a hash-based reference instead.
         """
         if self.hash is None:
-            # Upload the file to the api, then save its hash into this reference
-            # attributes
+            # Snapshot the text and register it for upload, then save its hash
+            # into this reference attributes
             if self.text is None:
                 raise ValueError("The text must be provided when the hash is not set")
 
             text = self.resolve_other(self.text, PythonLogger(LOGGER))
-            hash = hash_file(text.encode())
 
-            client = SyncClient("compiler")
-            stats_result = client.stat_files(files=[hash])
-            if stats_result.code != 200:
-                raise RuntimeError(
-                    f"Unable to check status of files at server ({stats_result.code}): {stats_result.result}"
-                )
-
-            missing = hash in stats_result.result["files"]
-            if missing:
-                upload_result = client.upload_file(
-                    id=hash,
-                    content=base64.b64encode(text.encode()).decode("ascii"),
-                )
-                if upload_result.code != 200:
-                    raise RuntimeError(
-                        f"Unable to upload file to the server ({upload_result.code}): {upload_result.result}"
-                    )
-
-            # The file exists on the server, next time this reference is resolved, it
-            # should do it using the server
-            self.hash = hash
+            # The text will be uploaded to the server when the resources are
+            # exported, next time this reference is resolved, it should do it
+            # using the hash
+            self.hash = inmanta_plugins.files.upload.collect_snapshot(text.encode())
             self.text = None
 
-        # Now that we have the file available in the api, delegate serialization
+        # Now that the text is registered for upload, delegate serialization
         # to the parent class
         return super().serialize_arguments()
 
@@ -127,9 +110,10 @@ def create_text_reference(
     """
     Create a reference to a text, preferably long, which can be consumed either
     by the agent or the compiler.  To share this long text with the agent, the
-    instead of storing the full text in the serialized reference.
-    During reference serialization (during resource export), the text is uploaded
-    to the server.  When the reference is resolved on the server side the text is
+    reference uses the file api instead of storing the full text in the
+    serialized reference.  During reference serialization, the text is
+    registered for upload, it is uploaded to the server when the resources are
+    exported.  When the reference is resolved on the agent side the text is
     pulled from the files api.
 
     :param text: The textual content should be accessed when the reference is resolved.
@@ -159,7 +143,7 @@ def get_file(hash: str) -> bytes:
 class TextFileContentReference(Reference[str]):
     def __init__(
         self,
-        file_path: str | Reference[str],
+        file_path: str | Reference[str] | None,
         file_hash: str | Reference[str] | None,
     ):
         super().__init__()
@@ -168,8 +152,15 @@ class TextFileContentReference(Reference[str]):
 
     def resolve(self, logger: LoggerABC) -> str:
         if self.file_hash is not None:
-            # Resolve from file api
             file_hash = self.resolve_other(self.file_hash, logger)
+
+            # Resolve from the snapshot collected during this compile, if the
+            # file hasn't been uploaded to the server yet
+            snapshot = inmanta_plugins.files.upload.get_snapshot(file_hash)
+            if snapshot is not None:
+                return snapshot.decode()
+
+            # Resolve from file api
             return get_file(file_hash).decode()
 
         if self.file_path is not None:
@@ -185,12 +176,12 @@ class TextFileContentReference(Reference[str]):
 
     def serialize_arguments(self) -> tuple[uuid.UUID, list[ArgumentTypes]]:
         """
-        Override parent implementation, to upload file content to the server
-        and return a hash-based reference instead.
+        Override parent implementation, to register the file content for upload
+        to the server and return a hash-based reference instead.
         """
         if self.file_hash is None:
-            # Upload the file to the api, then save its hash into this reference
-            # attributes
+            # Snapshot the file content and register it for upload, then save
+            # its hash into this reference attributes
             if self.file_path is None:
                 raise ValueError(
                     "The file_path must be provided when the file_hash is not set"
@@ -198,31 +189,17 @@ class TextFileContentReference(Reference[str]):
 
             file_path = self.resolve_other(self.file_path, PythonLogger(LOGGER))
             file_content = pathlib.Path(file_path).read_text()
-            file_hash = hash_file(file_content.encode())
 
-            client = SyncClient("compiler")
-            stats_result = client.stat_files(files=[file_hash])
-            if stats_result.code != 200:
-                raise RuntimeError(
-                    f"Unable to check status of files at server ({stats_result.code}): {stats_result.result}"
-                )
+            # The file will be uploaded to the server when the resources are
+            # exported, next time this reference is resolved, it should do it
+            # using the hash.  The file path is dropped so that the serialized
+            # reference only depends on the content of the file.
+            self.file_hash = inmanta_plugins.files.upload.collect_snapshot(
+                file_content.encode()
+            )
+            self.file_path = None
 
-            missing = file_hash in stats_result.result["files"]
-            if missing:
-                upload_result = client.upload_file(
-                    id=file_hash,
-                    content=base64.b64encode(file_content.encode()).decode("ascii"),
-                )
-                if upload_result.code != 200:
-                    raise RuntimeError(
-                        f"Unable to upload file to the server ({upload_result.code}): {upload_result.result}"
-                    )
-
-            # The file exists on the server, next time this reference is resolved, it
-            # should do it using the server
-            self.file_hash = file_hash
-
-        # Now that we have the file available in the api, delegate serialization
+        # Now that the file is registered for upload, delegate serialization
         # to the parent class
         return super().serialize_arguments()
 
@@ -234,10 +211,10 @@ def create_text_file_content_reference(
     """
     Create a reference to the content of a file, which can be consumed either
     by the agent or the compiler.  To share the content of the file with the
-    agent, the reference uses the file api.  During reference serialization (
-    during resource export), the file content is read, and uploaded to the
-    server.  When the reference is resolved on the server side the file is pulled
-    from the files api.
+    agent, the reference uses the file api.  During reference serialization,
+    the file content is read and registered for upload, it is uploaded to the
+    server when the resources are exported.  When the reference is resolved on
+    the agent side the file is pulled from the files api.
 
     :param file_path: The file to the path in the current filesystem whose content
         should be accessed when the reference is resolved.

@@ -261,3 +261,22 @@ implementation symlink_permissions for Symlink:
     """
     self.permissions = null
 end
+
+
+entity FileUploadTrigger:
+    """
+    Internal entity, it is not meant to be used and shouldn't be relied upon.
+    Its unique instance, created at the root of this module, triggers the
+    upload of the files registered by file/text references during the export.
+    The matching resource is never sent to the orchestrator.
+
+    :attr name: Dummy attribute identifying the unique instance of this entity.
+    """
+    string name = "files"
+end
+
+index FileUploadTrigger(name)
+
+implement FileUploadTrigger using std::none
+
+FileUploadTrigger()
