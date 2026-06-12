@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.9.1 - ?
+## v2.9.1 - 2026-06-12
 
 - Defer the upload of files referenced by file/text references to the resource export: compiles no longer require a
   reachable server, identical content is uploaded only once, and the server-side existence check is batched.
