@@ -32,9 +32,8 @@ async def off_main_thread[T](func: typing.Callable[[], T]) -> T:
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
-async def test_text_model(
+def test_text_model(
     project: Project,
-    server: Server,
     dir_path: pathlib.Path = pathlib.Path("/tmp/example"),
     purged: bool = False,
     content: str = "test",
@@ -64,14 +63,11 @@ async def test_text_model(
         )
     """
 
-    await off_main_thread(
-        functools.partial(project.compile, model.strip("\n"), no_dedent=False)
-    )
+    project.compile(model.strip("\n"), no_dedent=False)
 
 
-async def test_text_file_content_model(
+def test_text_file_content_model(
     project: Project,
-    server: Server,
     dir_path: pathlib.Path = pathlib.Path("/tmp/example"),
     purged: bool = False,
     content: str = "test",
@@ -105,9 +101,7 @@ async def test_text_file_content_model(
         )
     """
 
-    await off_main_thread(
-        functools.partial(project.compile, model.strip("\n"), no_dedent=False)
-    )
+    project.compile(model.strip("\n"), no_dedent=False)
 
 
 async def test_deploy(
@@ -125,12 +119,16 @@ async def test_deploy(
         assert file.read_text() == "test"
         assert not project.dryrun_resource("files::TextFile")
 
-    await test_text_model(project, server, file, purged=False, content="test")
+    await off_main_thread(
+        functools.partial(test_text_model, project, file, purged=False, content="test")
+    )
     await off_main_thread(test)
 
     file.unlink()
 
-    await test_text_file_content_model(
-        project, server, file, purged=False, content="test"
+    await off_main_thread(
+        functools.partial(
+            test_text_file_content_model, project, file, purged=False, content="test"
+        )
     )
     await off_main_thread(test)
