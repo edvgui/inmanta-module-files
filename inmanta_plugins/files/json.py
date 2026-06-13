@@ -89,15 +89,26 @@ def json_value(raw_value: object) -> object:
     a mutable, json-like python object.  Sequences are converted into
     lists, and Mappings into dicts.  Any other value is kept as is.
 
+    Reference values (or references nested in dicts/lists) are passed
+    through unchanged so they can be resolved by the handler at deploy
+    time.  Because ``allow_reference_values`` only opts in a single proxy
+    level, it is re-applied each time we descend into a collection.
+
     :param raw_value: The raw value that should be converted.
     """
     match raw_value:
         case str():
             return raw_value
         case Sequence() | SequenceProxy():
-            return [json_value(item) for item in raw_value]
+            return [
+                json_value(item)
+                for item in inmanta.plugins.allow_reference_values(raw_value)
+            ]
         case Mapping():
-            return {k: json_value(v) for k, v in raw_value.items()}
+            return {
+                k: json_value(v)
+                for k, v in inmanta.plugins.allow_reference_values(raw_value).items()
+            }
         case _:
             return raw_value
 
@@ -321,7 +332,10 @@ def get_instance_attributes(
             attr_name, attr_name
         )
         attributes[serialized_name] = json_value(
-            getattr(serializable_entity, attr_name)
+            getattr(
+                inmanta.plugins.allow_reference_values(serializable_entity),
+                attr_name,
+            )
         )
 
     return attributes

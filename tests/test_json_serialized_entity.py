@@ -18,6 +18,7 @@ Contact: edvgui@gmail.com
 
 import pytest_inmanta.plugin
 
+import inmanta.references
 from inmanta_plugins.files.json import (
     Operation,
     SerializedEntity,
@@ -169,6 +170,61 @@ a = Test(
                 },
             ],
         },
+    )
+
+
+def test_reference_scalar_attribute(
+    project: pytest_inmanta.plugin.Project,
+) -> None:
+    """
+    A serialized attribute that is itself a reference must be passed through
+    to the serialized value, not rejected during compilation.
+    """
+    model = """
+import std
+
+a = Test(
+    name=std::create_environment_reference("NAME"),
+    required=RequiredEmbeddedTest(name="required"),
+    path=".",
+    operation=files::replace,
+    resource=files::json::JsonResource(),
+)
+"""
+
+    project.compile(TYPE_DEFINITION + model)
+
+    instance = project.get_instances("__config__::Test")[0]
+    serialized = serialize(instance)
+    assert isinstance(serialized.value["name"], inmanta.references.Reference)
+
+
+def test_reference_in_dict_attribute(
+    project: pytest_inmanta.plugin.Project,
+) -> None:
+    """
+    A reference nested inside a dict attribute value must be passed through
+    to the serialized value, not rejected during compilation.
+    """
+    model = """
+import std
+
+a = Test(
+    name="test",
+    attr={"Authorization": std::create_environment_reference("AUTH_TOKEN")},
+    required=RequiredEmbeddedTest(name="required"),
+    path=".",
+    operation=files::replace,
+    resource=files::json::JsonResource(),
+)
+"""
+
+    project.compile(TYPE_DEFINITION + model)
+
+    instance = project.get_instances("__config__::Test")[0]
+    serialized = serialize(instance)
+    assert isinstance(
+        serialized.value["attr"]["Authorization"], inmanta.references.Reference
     )
 
 
