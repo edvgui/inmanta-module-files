@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.9.2 - ?
+## v2.9.2 - 2026-06-13
 
 - Allow reference values in serialized JsonResource attributes (scalars and values nested in dicts/lists), passing them
   through to the resource so they are resolved by the handler at deploy time.
