@@ -1,5 +1,5 @@
 """
-Copyright 2023 Guillaume Everarts de Velp
+Copyright 2026 Guillaume Everarts de Velp
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,19 +17,43 @@ Contact: edvgui@gmail.com
 """
 
 import base64
+import contextlib
+import contextvars
 import functools
 import logging
 import pathlib
+import typing
 import uuid
+from collections.abc import Mapping
 
+import jinja2
 from inmanta_plugins.config import resolve_path
+from inmanta_plugins.std import FactReference, JinjaDynamicProxy
 
+import inmanta.ast
 import inmanta_plugins.files.upload
 from inmanta.agent.handler import LoggerABC, PythonLogger
-from inmanta.plugins import plugin
+from inmanta.plugins import CheckedArgs, Context, Plugin, plugin
 from inmanta.protocol.endpoints import SyncClient
 from inmanta.references import ArgumentTypes, Reference, reference
+from inmanta_plugins.files.monkeypatch import allow_references_in_templates
 
+JINJA_DEFERRED_CONTEXT: contextvars.ContextVar[dict[str, Reference[str]]] = (
+    contextvars.ContextVar("JINJA_DEFERRED_CONTEXT")
+)
+JINJA_FILE: contextvars.ContextVar[str] = contextvars.ContextVar("JINJA_FILE")
+JINJA_ENV: jinja2.Environment | None = None
+# Compiled jinja templates, keyed by resolved template path.  Compiling a
+# template from source (parse + optimize + bytecode) is expensive and the same
+# handful of templates are rendered thousands of times per compile, so we cache
+# the compiled Template objects.  Cleared in inmanta_reset_state alongside the
+# environment they are bound to.
+JINJA_TEMPLATE_CACHE: dict[str, "jinja2.Template"] = dict()
+REFERENCES: list[Reference] = list()
+# Reference classes whose __str__ should be temporarily overwritten during a
+# jinja render so that they register themselves in the current jinja context.
+# Populated by auto_register_reference.
+REFERENCE_CLASSES: list[type[Reference]] = list()
 LOGGER = logging.getLogger(__name__)
 
 
@@ -220,3 +244,224 @@ def create_text_file_content_reference(
         should be accessed when the reference is resolved.
     """
     return TextFileContentReference(resolve_path(file_path), None)
+
+
+@reference("misty::JinjaReference")
+class JinjaReference(Reference[str]):
+    """
+    Reference to resolve a basic jinja template on the handler side.  The template
+    may only expect simple strings, which should all be provided in the context
+    dict.  These strings may be references themselves.
+    """
+
+    def __init__(
+        self,
+        template: str | Reference[str],
+        references: Mapping[str, str | Reference[str]],
+    ):
+        super().__init__()
+        self.template = template
+        self.references = references
+
+    def resolve(self, logger: LoggerABC) -> str:
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+        tmpl = env.from_string(self.resolve_other(self.template, logger))
+        return tmpl.render(
+            references={
+                k: self.resolve_other(v, logger) for k, v in self.references.items()
+            },
+        )
+
+
+@contextlib.contextmanager
+def jinja_deferred_context(file: str) -> typing.Iterator[dict[str, Reference[str]]]:
+    # Setup a new dict and give away the context
+    context: dict[str, Reference[str]] = {}
+    context_token = JINJA_DEFERRED_CONTEXT.set(context)
+    file_token = JINJA_FILE.set(file)
+    try:
+        yield context
+    finally:
+        # Always restore the context vars, even when the template rendering
+        # raises (e.g. when the compiler reschedules the plugin call because
+        # of an unset value).  Without this, JINJA_FILE and
+        # JINJA_DEFERRED_CONTEXT leak past the current render, polluting later
+        # renders (and even later tests running in the same thread) with a
+        # stale context dict, which causes references to be registered into the
+        # wrong dict and lost.
+        JINJA_FILE.reset(file_token)
+        JINJA_DEFERRED_CONTEXT.reset(context_token)
+
+
+@plugin
+def resolve_reference(
+    ref: str | Reference[str], *, soft: bool = True
+) -> str | Reference[str]:
+    """
+    Try to resolve the input reference, if it is one, return its resolved value.
+    If the reference can not be resolved, or the input value is a string, the
+    input value is returned as is.
+
+    :param ref: The input value or reference that we should try to resolve
+    :param soft: When set to False, raise an exception if the input is a reference
+        and can't be resolved.
+    """
+    match ref:
+        case str():
+            return ref
+        case Reference():
+            try:
+                return ref.resolve(PythonLogger(LOGGER))
+            except Exception:
+                if soft:
+                    return ref
+                else:
+                    raise
+        case _:
+            typing.assert_never(ref)
+
+
+@plugin
+def register_reference(value: str | Reference[str], *, resolve: bool = False) -> str:
+    """
+    This plugin can be called in a jinja template that is being
+    resolved by the jinja plugin.
+
+    :param value: The value that may or may not be a reference.  If it is a reference, it
+        is registered into the current context, if it is a str, it is returned directly.
+    :param name: The name to assign to the reference when saving it into the context.
+    :param resolve: Whether we should try to resolve the reference directly, and return its
+        value if the resolving succeeds.  If the resolving fails, return the reference.
+    """
+    if isinstance(value, str):
+        # Passthrough
+        return value
+
+    if resolve:
+        with contextlib.suppress(Exception):
+            # Try to resolve the reference now
+            return value.resolve(PythonLogger(LOGGER))
+
+    context = JINJA_DEFERRED_CONTEXT.get()
+    ref_id, _ = value.serialize_arguments()  # TODO: optimize this
+    context[str(ref_id)] = value
+    return f'{{{{ references["{str(ref_id)}"] }}}}'
+
+
+def auto_register_reference[R: Reference](ref_cls: type[R]) -> type[R]:
+    """
+    Decorate a reference class, to indicate that the presence of one of its instances
+    in a template as a terminal value should automatically register said instance
+    in the current jinja reference context.
+
+    The actual __str__ patching is done temporarily, for the duration of a jinja
+    render only, by ``allow_references_in_templates``.  Here we only collect the
+    classes that should be patched.
+    """
+    REFERENCE_CLASSES.append(ref_cls)
+    return ref_cls
+
+
+auto_register_reference(Reference)
+auto_register_reference(FactReference)
+
+
+def get_jinja_env(ctx: Context) -> jinja2.Environment:
+    """
+    Helper to construct a jinja environment that can be used with the inmanta
+    dsl.  It loads all the plugins as filters and wraps the dynamic proxy
+    objects into jinja specific proxies.
+    """
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+
+    # Registering all plugins as filters
+    def curywrapper(func: Plugin) -> typing.Callable:
+        def safewrapper(*args, **kwargs) -> typing.Any:
+
+            # Make sure that a plugin with a Context argument can be called
+            # inside a template
+            if func._context != -1:
+                new_args = list(args)
+                new_args.insert(func._context, ctx)
+                args = tuple(new_args)
+
+            # Execute the plugin
+            value = func.call_in_context(
+                processed_args=CheckedArgs(
+                    args=list(args),
+                    kwargs=kwargs,
+                    unknowns=False,
+                ),
+                resolver=ctx.resolver,
+                queue=ctx.queue,
+                location=inmanta.ast.Range(JINJA_FILE.get(), 0, 0, 0, 0),
+            )
+
+            # If we get a dynamic proxy, make sure to wrap it in case it
+            # contains unset attributes.
+            return JinjaDynamicProxy.return_value(value)
+
+        return safewrapper
+
+    for name, cls in ctx.get_compiler().get_plugins().items():
+        env.filters[name.replace("::", ".")] = curywrapper(cls)
+
+    return env
+
+
+@plugin
+def jinja(
+    ctx: Context,
+    template_path: str,
+    **kwargs: object,
+) -> JinjaReference | str:
+    """
+    Resolve a jinja template located at the given path, with all the keyword arguments
+    as input.  If any reference is emitted and not converted to a primitive, the plugin
+    returns a reference to finish the evaluation of the template in a context
+    where the reference is known.
+
+    :param template_path: The path to the template in the project
+    :param **kwargs: Input to the template
+    """
+    # Resolve the full path of the template
+    template_path = resolve_path(template_path)
+
+    # Setting up the jinja2 environment
+    global JINJA_ENV
+    if JINJA_ENV is None:
+        JINJA_ENV = get_jinja_env(ctx)
+
+    # Reading the template string and building the template object.  Compiling
+    # the template is expensive, so reuse the compiled object across the many
+    # renders of the same template within a single compile.
+    template = JINJA_TEMPLATE_CACHE.get(template_path)
+    if template is None:
+        template_string = pathlib.Path(template_path).read_text()
+        template = JINJA_ENV.from_string(template_string)
+        JINJA_TEMPLATE_CACHE[template_path] = template
+
+    # Wrap kwargs so that optional inmanta relations behave as Jinja Undefined
+    # rather than raising OptionalValueException at attribute access time.
+    wrapped_kwargs = {
+        key: JinjaDynamicProxy.return_value(value) for key, value in kwargs.items()
+    }
+
+    # In order to use references in templates, we need to monkeypatch core and
+    # std.  This is done only for the duration of the render, so the patches
+    # never leak to code running outside of a jinja render.
+    with allow_references_in_templates(REFERENCE_CLASSES, register_reference):
+        with jinja_deferred_context(template_path) as context:
+            try:
+                rendered = template.render(wrapped_kwargs)
+            except jinja2.exceptions.UndefinedError as e:
+                raise inmanta.ast.NotFoundException(ctx.owner, "", e.message)
+
+    if len(context) == 0:
+        # No reference to resolve later on
+        return rendered
+    else:
+        return JinjaReference(
+            template=rendered,
+            references=context,
+        )
