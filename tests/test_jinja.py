@@ -151,3 +151,96 @@ def test_no_reference(project: Project, tmp_path: pathlib.Path) -> None:
 
     file = project.get_instances("files::TextFile").pop()
     assert file.content == "Hello world!"
+
+
+def test_one_pass_unset_discovery(project: Project, tmp_path: pathlib.Path) -> None:
+    """
+    A template that reads several model values which are not frozen yet is
+    rendered once in "discovery" mode: all the unset values are collected in a
+    single pass and waited for at once, instead of rescheduling the whole render
+    once per miss.
+    """
+    import jinja2
+
+    import inmanta_plugins.files as files_plugin
+
+    template_dir = pathlib.Path(project._test_project_dir, "templates")
+    template_dir.mkdir(parents=True, exist_ok=True)
+    (template_dir / "multi.j2").write_text(
+        "{{ config.a }}-{{ config.b }}-{{ config.c }}"
+    )
+
+    # Count full template renders, and record how many misses the collector held
+    # at each collection during a discovery pass.
+    render_count = 0
+    original_render = jinja2.Template.render
+
+    def counting_render(self: jinja2.Template, *args: object, **kwargs: object) -> str:
+        nonlocal render_count
+        render_count += 1
+        return original_render(self, *args, **kwargs)
+
+    pass_sizes: list[int] = []
+    original_collect = files_plugin.collect_or_raise
+
+    def spy_collect(exc: object) -> object:
+        result = original_collect(exc)
+        collector = files_plugin.JINJA_UNSET_COLLECTOR.get()
+        if collector is not None:
+            pass_sizes.append(len(collector))
+        return result
+
+    jinja2.Template.render = counting_render
+    files_plugin.collect_or_raise = spy_collect
+    try:
+        project.compile(
+            """
+            import files
+            import files::host
+            import mitogen
+            import std
+
+            host = std::Host(
+                name="localhost",
+                os=std::linux,
+                via=mitogen::Local(),
+            )
+
+            # The three attributes are only assigned in the implementation, so
+            # they are all unset when the jinja plugin is first evaluated.
+            entity Config:
+                string a
+                string b
+                string c
+            end
+            implement Config using compute
+
+            implementation compute for Config:
+                self.a = "AAA"
+                self.b = "BBB"
+                self.c = "CCC"
+            end
+
+            config = Config()
+
+            files::TextFile(
+                path="/a",
+                content=files::jinja("template:///multi.j2", config=config),
+                host=host,
+            )
+            """,
+            no_dedent=False,
+        )
+    finally:
+        jinja2.Template.render = original_render
+        files_plugin.collect_or_raise = original_collect
+
+    # The template was rendered correctly, with all the deferred values.
+    file = project.get_instances("files::TextFile").pop()
+    assert file.content == "AAA-BBB-CCC"
+
+    # A single discovery pass collected all three misses at once: the old
+    # per-miss behaviour could never hold more than one miss in a single render.
+    assert max(pass_sizes) == 3
+    # One discovery render that collected the batch, then one clean render.
+    assert render_count == 2

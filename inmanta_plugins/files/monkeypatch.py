@@ -22,6 +22,7 @@ from collections.abc import Collection, Iterator
 
 from inmanta_plugins.std import JinjaDynamicProxy
 
+from inmanta.ast import UnsetException
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.references import Reference
 
@@ -133,3 +134,35 @@ def allow_references_in_templates(
             # context of this function
             JinjaDynamicProxy.return_value = original_jinja_dynamic_proxy_return_value
             DynamicProxy._return_value = original_dynamic_proxy_return_value
+
+
+@contextlib.contextmanager
+def collect_unset_values(
+    collect_or_raise: typing.Callable[[UnsetException], object],
+) -> Iterator[None]:
+    """
+    Temporarily patch JinjaDynamicProxy.__getattr__ so that reading a model
+    value which is not frozen yet is reported to collect_or_raise instead of
+    aborting the render at the first miss.
+
+    This enables the one-pass dependency discovery implemented by the jinja
+    plugin: collect_or_raise records the miss and returns a chaining-undefined,
+    so the render keeps going and reaches the other (independent) unset values.
+
+    The patch is reverted when the context manager is exited (even on error), so
+    it never leaks to code running outside of a jinja render.
+    """
+    original_getattr = JinjaDynamicProxy.__getattr__
+
+    def __getattr__(self: JinjaDynamicProxy, name: str) -> object:
+        try:
+            return original_getattr(self, name)
+        except UnsetException as e:
+            return collect_or_raise(e)
+
+    JinjaDynamicProxy.__getattr__ = __getattr__
+
+    try:
+        yield None
+    finally:
+        JinjaDynamicProxy.__getattr__ = original_getattr

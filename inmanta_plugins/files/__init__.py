@@ -36,7 +36,10 @@ from inmanta.agent.handler import LoggerABC, PythonLogger
 from inmanta.plugins import CheckedArgs, Context, Plugin, plugin
 from inmanta.protocol.endpoints import SyncClient
 from inmanta.references import ArgumentTypes, Reference, reference
-from inmanta_plugins.files.monkeypatch import allow_references_in_templates
+from inmanta_plugins.files.monkeypatch import (
+    allow_references_in_templates,
+    collect_unset_values,
+)
 
 JINJA_DEFERRED_CONTEXT: contextvars.ContextVar[dict[str, Reference[str]]] = (
     contextvars.ContextVar("JINJA_DEFERRED_CONTEXT")
@@ -55,6 +58,40 @@ REFERENCES: list[Reference] = list()
 # Populated by auto_register_reference.
 REFERENCE_CLASSES: list[type[Reference]] = list()
 LOGGER = logging.getLogger(__name__)
+
+
+# --- One-pass dependency discovery -------------------------------------------
+#
+# Rendering a template reads many model values.  When the first one that is not
+# yet frozen raises UnsetException, the whole render aborts and the compiler
+# reschedules and fully re-runs the template.  A template that reads K still-unset
+# values is therefore rendered up to K+1 times.
+#
+# Instead we render once in "discovery" mode: each unset value encountered is
+# collected and replaced by a chaining-undefined so the render keeps going and
+# reaches the other (independent) unset values.  If anything was collected, the
+# render output is discarded and a single MultiUnsetException is raised for the
+# whole batch, so the compiler waits for all of them at once and re-invokes us.
+# Only a pass that observes zero misses used real values throughout, so only its
+# output is ever returned -- which keeps the result identical to the old code.
+JINJA_UNSET_COLLECTOR: contextvars.ContextVar[set[object] | None] = (
+    contextvars.ContextVar("files_jinja_unset_collector", default=None)
+)
+
+
+def collect_or_raise(exc: inmanta.ast.UnsetException) -> object:
+    """
+    During a discovery render, record the unset value and return a
+    chaining-undefined so rendering can continue.  Outside a discovery render
+    (no active collector) propagate the exception, preserving the original
+    per-miss rescheduling behaviour.
+    """
+    collector = JINJA_UNSET_COLLECTOR.get()
+    variable = exc.get_result_variable()
+    if collector is None or variable is None:
+        raise exc
+    collector.add(variable)
+    return jinja2.ChainableUndefined(hint=exc.msg)
 
 
 @plugin
@@ -447,15 +484,46 @@ def jinja(
         key: JinjaDynamicProxy.return_value(value) for key, value in kwargs.items()
     }
 
-    # In order to use references in templates, we need to monkeypatch core and
-    # std.  This is done only for the duration of the render, so the patches
+    # Render once in discovery mode: collect every unset model value instead of
+    # aborting at the first one (see collect_or_raise).  If any were missing,
+    # wait for the whole batch at once rather than rescheduling per miss.
+    #
+    # In order to use references in templates, we also need to monkeypatch core
+    # and std.  This is done only for the duration of the render, so the patches
     # never leak to code running outside of a jinja render.
-    with allow_references_in_templates(REFERENCE_CLASSES, register_reference):
-        with jinja_deferred_context(template_path) as context:
-            try:
-                rendered = template.render(wrapped_kwargs)
-            except jinja2.exceptions.UndefinedError as e:
-                raise inmanta.ast.NotFoundException(ctx.owner, "", e.message)
+    collector: set[object] = set()
+    batch_unset = inmanta.ast.MultiUnsetException(
+        f"Template {template_path} accessed values that were not set yet",
+        # filled in below once the discovery pass has run
+        [],
+    )
+    token = JINJA_UNSET_COLLECTOR.set(collector)
+    try:
+        with allow_references_in_templates(REFERENCE_CLASSES, register_reference):
+            with collect_unset_values(collect_or_raise):
+                with jinja_deferred_context(template_path) as context:
+                    rendered = template.render(wrapped_kwargs)
+    except (inmanta.ast.UnsetException, inmanta.ast.MultiUnsetException):
+        # Raised by a nested template/plugin: propagate unchanged.
+        raise
+    except Exception as e:
+        # A collected unset value can cascade into a downstream error during the
+        # discovery render (e.g. a chaining-undefined reaching a filter).  If we
+        # collected any misses, that error is presumed to be a consequence of
+        # them: wait for the batch and retry.  A genuine error surfaces
+        # unchanged on the final pass, where nothing is collected.
+        if collector:
+            batch_unset.result_variables = list(collector)
+            raise batch_unset from None
+        if isinstance(e, jinja2.exceptions.UndefinedError):
+            raise inmanta.ast.NotFoundException(ctx.owner, "", e.message)
+        raise
+    finally:
+        JINJA_UNSET_COLLECTOR.reset(token)
+
+    if collector:
+        batch_unset.result_variables = list(collector)
+        raise batch_unset
 
     if len(context) == 0:
         # No reference to resolve later on
