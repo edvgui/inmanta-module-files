@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.10.1 - ?
+## v2.11.0 - ?
 
+- Allow to skip in-model serialization of JsonResource.
 
 ## v2.10.0 - 2026-06-20
 
