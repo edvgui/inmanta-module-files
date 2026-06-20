@@ -720,15 +720,43 @@ class JsonFileResource(inmanta_plugins.files.base.BaseFileResource):
                     f"all paths must start with {path_prefix}"
                 )
 
+        values = {
+            validate_path(value.path): {
+                "path": validate_path(value.path),
+                "operation": value.operation,
+                "value": value.value,
+            }
+            for value in entity.values
+        }
+
+        # If the resource also extends JsonResource, get all the serialized items
+        # and add them to our values list
+        if "files::json::JsonResource" in entity._type().get_all_parent_names():
+            if entity.serialize:
+                # The serialized entities are already present in the model, simply
+                # pick them up
+                serialized_entities = typing.cast(
+                    list[SerializableEntity], entity.serialized
+                )
+            else:
+                # Serialization is not done in the model, do it now
+                serialized_entities = serialize_for_resource(entity.root, entity)
+
+            # Add all serialized entities which are not in the object list yet
+            for serialized in serialized_entities:
+                values.setdefault(
+                    serialized.path,
+                    {
+                        "path": serialized.path,
+                        "operation": serialized.operation,
+                        "value": (
+                            serialized.value if serialized.value is not None else {}
+                        ),
+                    },
+                )
+
         return sorted(
-            [
-                {
-                    "path": validate_path(value.path),
-                    "operation": value.operation,
-                    "value": value.value,
-                }
-                for value in entity.values
-            ],
+            values.values(),
             key=lambda d: d["path"],
         )
 
