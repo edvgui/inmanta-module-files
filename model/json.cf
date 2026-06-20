@@ -94,7 +94,13 @@ entity JsonResource extends std::Resource:
     This entity takes care of serializing all the attached entities into a list of
     of objects (SerializedEntity) that can be used in the handler to update the
     current state object with the content of the desired state.
+
+    :attr serialize: When true, run the serialization of the resource in-compile.
+        This allows to use the serialized entities in the model, but it comes at
+        a performance cost, as the serialization plugins are expensive to run on
+        a module with many unset values.
     """
+    bool serialize = true
 end
 JsonResource.root [0:1] -- SerializableEntity
 """
@@ -228,7 +234,7 @@ implementation serialize_entities for JsonResource:
 
     # If at least one entity is attached, serialize the full tree
     # and attach each entity into the serialized relation
-    if self.root is defined:
+    if self.root is defined and self.serialize:
         # TODO: https://github.com/edvgui/inmanta-module-files/issues/136
         self.serialized = [
             SerializedEntity(
