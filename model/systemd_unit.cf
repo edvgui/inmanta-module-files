@@ -43,7 +43,7 @@ The Type= directive can be one of the following:
         The systemd process will wait for this to happen before proceeding to other units.
     idle: This indicates that the service will not be run until all jobs are dispatched.
     exec: The exec type is similar to simple, but the service manager will consider the unit started
-        immediately after the main service binary has been executed. 
+        immediately after the main service binary has been executed.
 """
 
 
@@ -51,7 +51,7 @@ entity Unit:
     """
     The first section found in most unit files is the [Unit] section. This is generally used for
     defining metadata for the unit and configuring the relationship of the unit to other units.
-    
+
     source: https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files
 
     :attr description:  This directive can be used to describe the name and basic functionality
@@ -257,11 +257,8 @@ implementation file_content for files::SystemdUnitFile:
     """
     Resolve the content of the unit file, generate it from a jinja template.
     """
-    # Define a variable that can be accessed in the template
-    unit_file = self
-
     # Load the content based on the template
-    self.content = std::template("files/systemd_unit.j2")
+    self.content = jinja("template://files/systemd_unit.j2", unit_file=self)
 end
 
 
