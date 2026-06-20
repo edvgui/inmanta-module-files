@@ -2,6 +2,7 @@
 
 ## v2.11.0 - ?
 
+- Automatically add JsonResource serialized entities to JsonFile resources when the serialized entity extends JsonResource
 - Allow to skip in-model serialization of JsonResource.
 
 ## v2.10.0 - 2026-06-20
