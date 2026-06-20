@@ -79,6 +79,12 @@ JINJA_UNSET_COLLECTOR: contextvars.ContextVar[set[object] | None] = (
 )
 
 
+def inmanta_reset_state() -> None:
+    global JINJA_ENV
+    JINJA_ENV = None
+    JINJA_TEMPLATE_CACHE.clear()
+
+
 def collect_or_raise(exc: inmanta.ast.UnsetException) -> object:
     """
     During a discovery render, record the unset value and return a
@@ -112,12 +118,20 @@ def path_join(base_path: str, *extra: str) -> str:
 class TextReference(Reference[str]):
     def __init__(
         self,
-        text: str | Reference[str] | None,
-        hash: str | Reference[str] | None,
+        text: str | Reference[str] | None = None,
+        hash: str | Reference[str] | None = None,
     ):
         super().__init__()
-        self.text = text
+        self._text = text
         self.hash = hash
+
+    @property
+    def text(self) -> str | Reference[str] | None:
+        # This text can be set in the compiler but should never be set in the
+        # exported resource.  To ensure this while preserving equality check
+        # in the compiler, we create this hidden attributes, which we use in
+        # the compiler and ignore in the deserialized resource
+        return self._text
 
     def resolve(self, logger: LoggerABC) -> str:
         if self.hash is not None:
@@ -157,11 +171,25 @@ class TextReference(Reference[str]):
             # exported, next time this reference is resolved, it should do it
             # using the hash
             self.hash = inmanta_plugins.files.upload.collect_snapshot(text.encode())
-            self.text = None
 
         # Now that the text is registered for upload, delegate serialization
         # to the parent class
         return super().serialize_arguments()
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not type(self):
+            return False
+
+        # References are the same if the text is equal or the hash
+        # is equal, only one needs to be True (both might not be True
+        # depending on how the reference is created).
+        if self.hash is not None and other.hash is not None:
+            return self.hash == other.hash
+
+        if self.text is not None and other.text is not None:
+            return self.text == other.text
+
+        return False
 
 
 @plugin
@@ -204,12 +232,20 @@ def get_file(hash: str) -> bytes:
 class TextFileContentReference(Reference[str]):
     def __init__(
         self,
-        file_path: str | Reference[str] | None,
-        file_hash: str | Reference[str] | None,
+        file_path: str | Reference[str] | None = None,
+        file_hash: str | Reference[str] | None = None,
     ):
         super().__init__()
-        self.file_path = file_path
+        self._file_path = file_path
         self.file_hash = file_hash
+
+    @property
+    def file_path(self) -> str | Reference[str] | None:
+        # This path can be set in the compiler but should never be set in the
+        # exported resource.  To ensure this while preserving equality check
+        # in the compiler, we create this hidden attributes, which we use in
+        # the compiler and ignore in the deserialized resource
+        return self._file_path
 
     def resolve(self, logger: LoggerABC) -> str:
         if self.file_hash is not None:
@@ -258,11 +294,25 @@ class TextFileContentReference(Reference[str]):
             self.file_hash = inmanta_plugins.files.upload.collect_snapshot(
                 file_content.encode()
             )
-            self.file_path = None
 
         # Now that the file is registered for upload, delegate serialization
         # to the parent class
         return super().serialize_arguments()
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not type(self):
+            return False
+
+        # References are the same if the file is equal or the hash
+        # is equal, only one needs to be True (both might not be True
+        # depending on how the reference is created).
+        if self.file_hash is not None and other.file_hash is not None:
+            return self.file_hash == other.file_hash
+
+        if self.file_path is not None and other.file_path is not None:
+            return self.file_path == other.file_path
+
+        return False
 
 
 @plugin
