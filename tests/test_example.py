@@ -20,6 +20,8 @@ import pathlib
 
 from pytest_inmanta.plugin import Project
 
+import inmanta.plugins
+
 
 def update_example(name: str, model: str) -> None:
     """
@@ -97,3 +99,51 @@ def test_simple(
     tested_model = pathlib.Path(project._test_project_dir, "main.cf").read_text()
     tested_model = tested_model.replace(str(tmp_path), "/example/folder")
     update_example("simple", tested_model)
+
+
+def test_jinja(
+    project: Project,
+) -> None:
+    # The jinja plugin renders a template located in the project's templates
+    # folder.  Any reference passed as input and emitted by the template is
+    # kept as a reference, to be resolved by the agent at deploy time.
+    template_dir = pathlib.Path(project._test_project_dir, "templates")
+    template_dir.mkdir(parents=True, exist_ok=True)
+    (template_dir / "app.conf.j2").write_text(
+        '[database]\npassword = {{ "APP_PASSWORD" | std.create_environment_reference() }}\n'
+    )
+
+    model = """
+        import mitogen
+        import files
+
+        import std
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        file = files::TextFile(
+            host=host,
+            path="/example/folder/app.conf",
+            # The template is rendered at compile time, but the password, which
+            # is an environment reference, is left untouched.  It is resolved by
+            # the agent, on the host, when the resource is deployed.
+            content=files::jinja("template:///app.conf.j2"),
+        )
+    """
+
+    project.compile(model, no_dedent=False)
+
+    # The rendered content is kept as a reference, the environment reference it
+    # embeds is only resolved on the agent side, at deploy time.
+    from inmanta_plugins.files import JinjaReference
+
+    file = project.get_instances("files::TextFile").pop()
+    file = inmanta.plugins.allow_reference_values(file)
+    assert isinstance(file.content, JinjaReference)
+
+    tested_model = pathlib.Path(project._test_project_dir, "main.cf").read_text()
+    update_example("jinja", tested_model)

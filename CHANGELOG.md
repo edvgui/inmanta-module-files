@@ -1,13 +1,14 @@
 # Changelog
 
-## v2.9.3 - ?
+## v2.10.0 - ?
 
+- Add files::JinjaReference reference and files::jinja plugin, to handle references in jinja templates.
+- Allow references in files::SystemdUnitFile resource.
 
 ## v2.9.2 - 2026-06-13
 
 - Allow reference values in serialized JsonResource attributes (scalars and values nested in dicts/lists), passing them
   through to the resource so they are resolved by the handler at deploy time.
-
 
 ## v2.9.1 - 2026-06-12
 

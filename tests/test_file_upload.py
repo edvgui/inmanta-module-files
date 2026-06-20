@@ -187,7 +187,6 @@ def test_serialized_value_is_content_based(
     not on its path: identical content at different paths serializes to the
     same value.
     """
-    import inmanta_plugins.files.upload as upload
     from inmanta_plugins.files import TextFileContentReference, TextReference
 
     file_a = tmp_path / "a" / "file.txt"
@@ -197,15 +196,12 @@ def test_serialized_value_is_content_based(
     file_a.write_text("identical content")
     file_b.write_text("identical content")
 
-    try:
-        ref_a = TextFileContentReference(str(file_a), None)
-        ref_b = TextFileContentReference(str(file_b), None)
-        assert ref_a.serialize() == ref_b.serialize()
-        assert ref_a.serialize().id == ref_b.serialize().id
+    ref_a = TextFileContentReference(str(file_a), None)
+    ref_b = TextFileContentReference(str(file_b), None)
+    assert ref_a.serialize() == ref_b.serialize()
+    assert ref_a.serialize().id == ref_b.serialize().id
 
-        text_a = TextReference("identical content", None)
-        text_b = TextReference("identical content", None)
-        assert text_a.serialize() == text_b.serialize()
-        assert text_a.serialize().id == text_b.serialize().id
-    finally:
-        upload.reset()
+    text_a = TextReference("identical content", None)
+    text_b = TextReference("identical content", None)
+    assert text_a.serialize() == text_b.serialize()
+    assert text_a.serialize().id == text_b.serialize().id

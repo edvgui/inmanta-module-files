@@ -60,7 +60,7 @@ def get_snapshot(file_hash: str) -> bytes | None:
     return _snapshots.get(file_hash)
 
 
-def reset() -> None:
+def inmanta_reset_state() -> None:
     """
     Reset the state accumulated during the compile and export, so that
     consecutive compiles in the same process don't leak state.
@@ -68,9 +68,6 @@ def reset() -> None:
     global _exporter
     _snapshots.clear()
     _exporter = None
-
-
-inmanta.compiler.finalizer(reset)
 
 
 @inmanta.resources.resource(
