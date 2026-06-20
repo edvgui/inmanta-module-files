@@ -246,7 +246,7 @@ def create_text_file_content_reference(
     return TextFileContentReference(resolve_path(file_path), None)
 
 
-@reference("misty::JinjaReference")
+@reference("files::JinjaReference")
 class JinjaReference(Reference[str]):
     """
     Reference to resolve a basic jinja template on the handler side.  The template

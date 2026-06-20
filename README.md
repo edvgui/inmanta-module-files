@@ -15,6 +15,8 @@ This module allows to manage files, on a unix host.  It contains the following r
 5. `files::SystemdUnitFile`: an entity representing a unit file, which exposes it most useful properties directly in the model.  After being exported, this resource becomes nothing more than a text file.
 6. `files::Symlink`: to manage a symlink, its existence and ownership.
 
+It also exposes the `files::jinja` plugin, to render a jinja template at compile time while keeping any [reference](https://docs.inmanta.com/community/dev/lsm/reference/references.html) it embeds (e.g. a secret) unresolved.  Such references are then resolved by the agent, on the host, when the resource is deployed.
+
 ## Example
 
 The following example makes sure that the directory `/example/folder/a` exists, and creates a text file in it.
@@ -53,5 +55,45 @@ file = files::TextFile(
 ```
 
 </x-example-simple>
+
+### Jinja templates with references
+
+The `files::jinja` plugin renders a template stored in the project's `templates/` folder.  Inputs that are [references](https://docs.inmanta.com/community/dev/lsm/reference/references.html), such as secrets pulled from the environment, are not resolved at compile time: they are kept in the rendered content and resolved by the agent, on the host, when the resource is deployed.
+
+Given the following template, stored in `templates/app.conf.j2`:
+
+```jinja
+[database]
+password = {{ "APP_PASSWORD" | std.create_environment_reference() }}
+```
+
+The following example renders it into a text file, while keeping the password as an environment reference resolved at deploy time:
+
+<x-example-jinja>
+
+```
+import mitogen
+import files
+
+import std
+
+host = std::Host(
+    name="localhost",
+    os=std::linux,
+    via=mitogen::Local(),
+)
+
+file = files::TextFile(
+    host=host,
+    path="/example/folder/app.conf",
+    # The template is rendered at compile time, but the password, which
+    # is an environment reference, is left untouched.  It is resolved by
+    # the agent, on the host, when the resource is deployed.
+    content=files::jinja("template:///app.conf.j2"),
+)
+
+```
+
+</x-example-jinja>
 
 Find more examples in the ´tests` folder of this module!
