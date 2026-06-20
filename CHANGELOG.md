@@ -3,6 +3,7 @@
 ## v2.10.0 - ?
 
 - Add files::JinjaReference reference and files::jinja plugin, to handle references in jinja templates.
+- Allow references in files::SystemdUnitFile resource.
 
 ## v2.9.2 - 2026-06-13
 
