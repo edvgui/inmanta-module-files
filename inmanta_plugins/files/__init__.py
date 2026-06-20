@@ -451,7 +451,7 @@ def jinja(
     ctx: Context,
     template_path: str,
     **kwargs: object,
-) -> JinjaReference | str:
+) -> JinjaReference | TextReference:
     """
     Resolve a jinja template located at the given path, with all the keyword arguments
     as input.  If any reference is emitted and not converted to a primitive, the plugin
@@ -527,9 +527,9 @@ def jinja(
 
     if len(context) == 0:
         # No reference to resolve later on
-        return rendered
+        return create_text_reference(rendered)
     else:
         return JinjaReference(
-            template=rendered,
+            template=create_text_reference(rendered),
             references=context,
         )

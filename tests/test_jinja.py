@@ -19,6 +19,7 @@ Contact: edvgui@gmail.com
 import logging
 import pathlib
 
+import jinja2
 import pytest
 from pytest_inmanta.plugin import Project
 
@@ -55,7 +56,7 @@ def test_basics(
 ) -> None:
     from inmanta_plugins.std import EnvironmentReference
 
-    from inmanta_plugins.files import JinjaReference
+    from inmanta_plugins.files import JinjaReference, TextReference
 
     # A reference emitted as a terminal value in a template is automatically
     # registered in the jinja reference context.
@@ -105,8 +106,9 @@ def test_basics(
         file = [f for f in files if f.path == path].pop()
         file = inmanta.plugins.allow_reference_values(file)
         assert isinstance(file.content, JinjaReference)
+        assert isinstance(file.content.template, TextReference)
         assert (
-            file.content.template
+            file.content.template.resolve(PythonLogger(LOGGER))
             == 'ENV={{ references["3ad25aea-bd44-30d8-8da3-f4c5e58e3d1e"] }}'
         )
         assert file.content.references == {
@@ -123,6 +125,8 @@ def test_no_reference(project: Project, tmp_path: pathlib.Path) -> None:
     When a template doesn't emit any reference, the jinja plugin resolves it
     directly and returns a plain string instead of a JinjaReference.
     """
+    from inmanta_plugins.files import TextReference
+
     template = """Hello {{ name }}!"""
     template_path = tmp_path / "test.j2"
     template_path.write_text(template)
@@ -150,7 +154,9 @@ def test_no_reference(project: Project, tmp_path: pathlib.Path) -> None:
     )
 
     file = project.get_instances("files::TextFile").pop()
-    assert file.content == "Hello world!"
+    file = inmanta.plugins.allow_reference_values(file)
+    assert isinstance(file.content, TextReference)
+    assert file.content.resolve(PythonLogger(LOGGER)) == "Hello world!"
 
 
 def test_one_pass_unset_discovery(project: Project, tmp_path: pathlib.Path) -> None:
@@ -160,9 +166,8 @@ def test_one_pass_unset_discovery(project: Project, tmp_path: pathlib.Path) -> N
     single pass and waited for at once, instead of rescheduling the whole render
     once per miss.
     """
-    import jinja2
-
     import inmanta_plugins.files as files_plugin
+    from inmanta_plugins.files import TextReference
 
     template_dir = pathlib.Path(project._test_project_dir, "templates")
     template_dir.mkdir(parents=True, exist_ok=True)
@@ -237,7 +242,9 @@ def test_one_pass_unset_discovery(project: Project, tmp_path: pathlib.Path) -> N
 
     # The template was rendered correctly, with all the deferred values.
     file = project.get_instances("files::TextFile").pop()
-    assert file.content == "AAA-BBB-CCC"
+    file = inmanta.plugins.allow_reference_values(file)
+    assert isinstance(file.content, TextReference)
+    assert file.content.resolve(PythonLogger(LOGGER)) == "AAA-BBB-CCC"
 
     # A single discovery pass collected all three misses at once: the old
     # per-miss behaviour could never hold more than one miss in a single render.
