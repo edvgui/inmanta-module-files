@@ -1,7 +1,8 @@
 # Changelog
 
-## v2.9.3 - ?
+## v2.10.0 - ?
 
+- Add files::JinjaReference reference and files::jinja plugin, to handle references in jinja templates.
 
 ## v2.9.2 - 2026-06-13
 
