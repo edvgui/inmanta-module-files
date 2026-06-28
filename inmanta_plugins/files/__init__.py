@@ -432,7 +432,7 @@ def register_reference(value: str | Reference[str], *, resolve: bool = False) ->
     context = JINJA_DEFERRED_CONTEXT.get()
     ref_id, _ = value.serialize_arguments()  # TODO: optimize this
     context[str(ref_id)] = value
-    return f'{{{{ references["{str(ref_id)}"] }}}}'
+    return f'{{% endraw %}}{{{{ references["{str(ref_id)}"] }}}}{{% raw %}}'
 
 
 def auto_register_reference[R: Reference](ref_cls: type[R]) -> type[R]:
@@ -580,6 +580,6 @@ def jinja(
         return rendered
     else:
         return JinjaReference(
-            template=create_text_reference(rendered),
+            template=create_text_reference("{% raw %}" + rendered + "{% endraw %}"),
             references=context,
         )
