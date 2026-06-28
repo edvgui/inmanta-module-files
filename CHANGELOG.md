@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.11.1 - ?
+## v2.11.1 - 2026-06-28
 
 - Escape raw values in deferred jinja templates so jinja-like content is not re-interpreted when the reference is resolved.
 
