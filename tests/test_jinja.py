@@ -107,9 +107,14 @@ def test_basics(
         file = inmanta.plugins.allow_reference_values(file)
         assert isinstance(file.content, JinjaReference)
         assert isinstance(file.content.template, TextReference)
+        # The rendered output is wrapped in a raw block so any jinja-like syntax
+        # it contains is left untouched on the final render, while the reference
+        # placeholder breaks out of the raw block to stay evaluable.
         assert (
             file.content.template.resolve(PythonLogger(LOGGER))
-            == 'ENV={{ references["3ad25aea-bd44-30d8-8da3-f4c5e58e3d1e"] }}'
+            == "{% raw %}ENV={% endraw %}"
+            '{{ references["3ad25aea-bd44-30d8-8da3-f4c5e58e3d1e"] }}'
+            "{% raw %}{% endraw %}"
         )
         assert file.content.references == {
             "3ad25aea-bd44-30d8-8da3-f4c5e58e3d1e": EnvironmentReference("TEST")
@@ -118,6 +123,84 @@ def test_basics(
         with monkeypatch.context() as ctx:
             ctx.setenv("TEST", "b")
             assert file.content.resolve(PythonLogger(LOGGER)) == "ENV=b"
+
+
+def test_raw_value_escaping(
+    project: Project, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    When a template emits a reference (so the render is deferred to the handler
+    side), the already rendered part must be treated as raw text on the final
+    render.  Otherwise any jinja-like syntax that ended up in the rendered output
+    -- typically coming from an input value rather than the template itself --
+    would be (mis)interpreted a second time when the JinjaReference is resolved.
+    """
+    from inmanta_plugins.std import EnvironmentReference
+
+    from inmanta_plugins.files import JinjaReference, TextReference
+
+    # This content contains jinja control sequences (``{{ ... }}`` and
+    # ``{% ... %}``) that must end up verbatim in the rendered output.  We wrap
+    # it in a raw block in the template source so the first (discovery) render
+    # emits it as-is instead of trying to interpret it.
+    raw_value = "{{ not_a_variable }} and {% if foo %}literal{% endif %}"
+
+    template = (
+        "{% raw %}RAW=" + raw_value + "{% endraw %}\n"
+        """ENV={{ "TEST" | std.create_environment_reference() }}"""
+    )
+    template_path = tmp_path / "test.j2"
+    template_path.write_text(template)
+
+    project.compile(
+        f"""
+        import std
+        import files
+        import files::host
+        import mitogen
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        files::TextFile(
+            path="/a",
+            content=files::jinja("file://{template_path}"),
+            host=host,
+        )
+        """,
+        no_dedent=False,
+    )
+
+    file = project.get_instances("files::TextFile").pop()
+    file = inmanta.plugins.allow_reference_values(file)
+
+    # A reference is emitted, so the render is deferred.
+    assert isinstance(file.content, JinjaReference)
+    assert isinstance(file.content.template, TextReference)
+
+    # The rendered part is wrapped in a raw block so the jinja-like content of
+    # ``raw_value`` is preserved verbatim, while the reference placeholder breaks
+    # out of the raw block to remain evaluable on the final render.
+    resolved_template = file.content.template.resolve(PythonLogger(LOGGER))
+    assert resolved_template.startswith("{% raw %}")
+    assert resolved_template.endswith("{% endraw %}")
+    assert raw_value in resolved_template
+    assert '{% endraw %}{{ references["' in resolved_template
+
+    # Resolving the whole reference keeps the raw value untouched and only
+    # substitutes the actual reference.
+    with monkeypatch.context() as ctx:
+        ctx.setenv("TEST", "resolved")
+        assert file.content.resolve(PythonLogger(LOGGER)) == (
+            f"RAW={raw_value}\nENV=resolved"
+        )
+
+    assert file.content.references == {
+        "3ad25aea-bd44-30d8-8da3-f4c5e58e3d1e": EnvironmentReference("TEST")
+    }
 
 
 def test_no_reference(project: Project, tmp_path: pathlib.Path) -> None:
