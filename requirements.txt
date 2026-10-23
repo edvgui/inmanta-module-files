@@ -2,4 +2,4 @@ inmanta-module-std==8.7.5
 inmanta-module-mitogen==0.2.5
 inmanta-module-config==0.8.0
 inmanta-core==20.1.0
-setuptools==84.0.0
+setuptools==84.2.1
