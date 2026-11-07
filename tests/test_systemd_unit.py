@@ -28,8 +28,6 @@ import pytest
 import pytest_inmanta.plugin
 
 from inmanta import const
-from inmanta.agent.handler import HandlerContext
-from inmanta.resources import Resource
 from inmanta_plugins.files.systemd import (
     SystemdDaemonReloadResource,
     SystemdUnitResource,
@@ -77,7 +75,8 @@ def unit_model(
     service_type: str = "simple",
     file_purged: bool = False,
     unit_purged: bool = False,
-    receive_events: bool = False,
+    restart_on_change: bool = False,
+    config_files: collections.abc.Sequence[pathlib.Path] = (),
 ) -> str:
     path = pathlib.Path.home() / ".config/systemd/user" / name
     return f"""
@@ -114,7 +113,8 @@ def unit_model(
             enabled=true,
             active=true,
             purged={json.dumps(unit_purged)},
-            receive_events={json.dumps(receive_events)},
+            restart_on_change={json.dumps(restart_on_change)},
+            config_files={json.dumps([str(f) for f in config_files])},
         )
     """
 
@@ -133,21 +133,15 @@ def get_reload(
     return typing.cast(SystemdDaemonReloadResource, resource)
 
 
-def deploy_and_reload(
-    project: pytest_inmanta.plugin.Project, resource: Resource
-) -> HandlerContext:
+def deploy_unit_file(project: pytest_inmanta.plugin.Project) -> None:
     """
-    Deploy the resource as if one of its dependencies changed: the agent then
-    calls the reload of the handler after deploying it.
+    Write the unit file, and reload the service manager, which only has to
+    happen once.
     """
-    handler = project.get_handler(resource, False)
-    ctx = HandlerContext(resource)
-    try:
-        handler.execute(ctx, resource)
-        handler.do_reload(ctx, resource)
-    finally:
-        project.finalize_handler(handler)
-    return ctx
+    project.deploy_resource("files::Directory")
+    project.deploy_resource(FILE)
+    project.deploy_resource(RELOAD, change=const.Change.updated)
+    project.deploy_resource(RELOAD, change=const.Change.nochange)
 
 
 def test_model(project: pytest_inmanta.plugin.Project) -> None:
@@ -190,9 +184,13 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     b_file = files["/etc/systemd/system/b.service"]
     user_a_file = files["/home/me/.config/systemd/user/a.service"]
 
-    # Every unit file of the host is loaded by the reloads
+    # Every unit file of the host is loaded by the reloads, which watch their folder
     for reload in [system_reload, user_reload]:
         assert {a_file.id, b_file.id, user_a_file.id} <= reload.requires
+        assert reload.paths == [
+            "/etc/systemd/system",
+            "/home/me/.config/systemd/user",
+        ]
 
     a = get_unit(project, "system/a.service")
     b = get_unit(project, "system/b.service")
@@ -212,46 +210,59 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     assert (b.enabled, b.active) == (False, False)
 
 
-def test_deploy(project: pytest_inmanta.plugin.Project, unit_name: str) -> None:
+def test_deploy(
+    project: pytest_inmanta.plugin.Project, unit_name: str, tmp_path: pathlib.Path
+) -> None:
     """
     The unit is skipped until it exists, then enabled and started, restarted
-    on changes when it receives events, and stopped and disabled once purged.
+    when its files change if it should, and stopped and disabled once purged.
     """
-    project.compile(unit_model(unit_name))
+    config_file = tmp_path / "config"
+    config_file.write_text("a")
+    project.compile(unit_model(unit_name, config_files=[config_file]))
 
     # The unit file doesn't exist yet
     project.deploy_resource(UNIT, status=const.ResourceState.skipped)
 
-    project.deploy_resource("files::Directory")
-    project.deploy_resource(FILE)
-    reload = project.get_resource(RELOAD)
-    assert reload is not None
-    assert deploy_and_reload(project, reload).status == const.ResourceState.deployed
-
     # The unit is now known, it gets enabled and started
+    deploy_unit_file(project)
     project.deploy_resource(UNIT, change=const.Change.updated)
     assert show(unit_name, "ActiveState") == "active"
     assert show(unit_name, "UnitFileState") == "enabled"
     project.deploy_resource(UNIT, change=const.Change.nochange)
 
-    # A unit that doesn't receive events is not restarted when a dependency changed
+    # The unit file changes, the unit is not restarted unless it should
     pid = show(unit_name, "MainPID")
-    unit = project.get_resource(UNIT)
-    assert unit is not None
-    ctx = deploy_and_reload(project, unit)
-    assert ctx.status == const.ResourceState.deployed
-    assert ctx.change == const.Change.nochange
+    project.compile(
+        unit_model(
+            unit_name, exec_start="/usr/bin/sleep 3600", config_files=[config_file]
+        )
+    )
+    deploy_unit_file(project)
+    project.deploy_resource(UNIT, change=const.Change.nochange)
     assert show(unit_name, "MainPID") == pid
 
-    # A unit that receives events is restarted
-    project.compile(unit_model(unit_name, receive_events=True))
-    unit = project.get_resource(UNIT)
-    assert unit is not None
-    ctx = deploy_and_reload(project, unit)
-    assert ctx.status == const.ResourceState.deployed
-    assert ctx.change == const.Change.updated
+    project.compile(
+        unit_model(
+            unit_name,
+            exec_start="/usr/bin/sleep 3600",
+            config_files=[config_file],
+            restart_on_change=True,
+        )
+    )
+    # The pending restart shows in a dry-run
+    assert set(project.dryrun_resource(UNIT)) == {"up_to_date"}
+    project.deploy_resource(UNIT, change=const.Change.updated)
     assert show(unit_name, "ActiveState") == "active"
     assert show(unit_name, "MainPID") != pid
+    project.deploy_resource(UNIT, change=const.Change.nochange)
+
+    # The config file changes, the unit is restarted
+    pid = show(unit_name, "MainPID")
+    config_file.write_text("b")
+    project.deploy_resource(UNIT, change=const.Change.updated)
+    assert show(unit_name, "MainPID") != pid
+    project.deploy_resource(UNIT, change=const.Change.nochange)
 
     # The purged unit is stopped and disabled, its file is left untouched
     project.compile(unit_model(unit_name, unit_purged=True))
@@ -263,9 +274,7 @@ def test_deploy(project: pytest_inmanta.plugin.Project, unit_name: str) -> None:
     # Once its file is removed and the manager reloaded, it is still purged
     project.compile(unit_model(unit_name, unit_purged=True, file_purged=True))
     project.deploy_resource(FILE, change=const.Change.purged)
-    reload = project.get_resource(RELOAD)
-    assert reload is not None
-    assert deploy_and_reload(project, reload).status == const.ResourceState.deployed
+    project.deploy_resource(RELOAD, change=const.Change.updated)
     assert show(unit_name, "LoadState") == "not-found"
     project.deploy_resource(UNIT, change=const.Change.nochange)
 
@@ -282,11 +291,7 @@ def test_deploy_failure(project: pytest_inmanta.plugin.Project, unit_name: str) 
             service_type="oneshot",
         )
     )
-    project.deploy_resource("files::Directory")
-    project.deploy_resource(FILE)
-    reload = project.get_resource(RELOAD)
-    assert reload is not None
-    assert deploy_and_reload(project, reload).status == const.ResourceState.deployed
+    deploy_unit_file(project)
 
     project.deploy_resource(UNIT, status=const.ResourceState.failed)
     assert project.ctx is not None

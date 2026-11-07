@@ -182,8 +182,8 @@ def test_systemd(
             name="example.service",
             enabled=true,
             active=true,
-            # Restart the service whenever its unit file changes
-            receive_events=true,
+            # Restart the service when its unit file changed since it started
+            restart_on_change=true,
             # No need to explicitly add the dependency to the unit file, or to
             # reload systemd, the exporter takes care of it:
             # unit file -> systemctl daemon-reload -> systemctl enable/start

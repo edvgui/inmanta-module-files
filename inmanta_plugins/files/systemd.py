@@ -17,8 +17,11 @@ Contact: edvgui@gmail.com
 """
 
 import collections
+import datetime
 import os
+import re
 import typing
+from collections.abc import Sequence
 
 import inmanta_plugins.mitogen.abc
 
@@ -26,8 +29,14 @@ import inmanta.agent.handler
 import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
-from inmanta import const
 from inmanta.export import ModelDict, ResourceDict, dependency_manager
+
+# The unit paths systemd writes to itself: generated units are rewritten on
+# every reload, transient and control units are loaded as soon as they are
+# written.  They never ask for a reload.
+SYSTEMD_OWNED_PATH = re.compile(
+    r"/systemd/(generator(\.early|\.late)?|transient)(/|$)|\.control(/|$)"
+)
 
 
 def manager_name(user: str | None) -> str:
@@ -38,7 +47,25 @@ def manager_name(user: str | None) -> str:
     return "system" if user is None else f"user/{user}"
 
 
-class SystemctlResource(inmanta_plugins.mitogen.abc.Resource):
+def parse_timestamp(value: str) -> float | None:
+    """
+    Parse a timestamp printed by systemctl show --timestamp=us+utc, e.g.
+    "Sat 2026-11-07 20:54:24.753120 UTC", into seconds since the epoch.
+    Return None for the timestamps of what never happened (empty or n/a).
+    """
+    try:
+        # Drop the day of the week, it doesn't matter and depends on the locale
+        _, date = value.split(" ", maxsplit=1)
+        return (
+            datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f UTC")
+            .replace(tzinfo=datetime.UTC)
+            .timestamp()
+        )
+    except ValueError:
+        return None
+
+
+class SystemctlResource(inmanta_plugins.mitogen.abc.ResourceABC):
     """
     Base class for all resources executing systemctl commands, against the
     service manager of the system or of a user.
@@ -62,15 +89,52 @@ class SystemctlResource(inmanta_plugins.mitogen.abc.Resource):
 R = typing.TypeVar("R", bound=SystemctlResource)
 
 
-class SystemctlHandler(inmanta_plugins.mitogen.abc.Handler[R]):
+class SystemctlHandler(inmanta_plugins.mitogen.abc.HandlerABC[R]):
     """
-    Base class for all handlers executing systemctl commands, it allows them to
-    reload on dependency changes and gives the journal of the units that fail.
+    Base class for all handlers executing systemctl commands, it gives the
+    journal of the units that fail.
     """
 
     def systemctl(self, resource: R, *args: str) -> tuple[str, str, int]:
         command = [*resource.systemctl_command, *args]
         return self.proxy.run(command[0], command[1:])
+
+    def show(
+        self, resource: R, *properties: str, unit: str | None = None
+    ) -> dict[str, str]:
+        """
+        Get the given properties of the unit, or of the service manager when no
+        unit is given.  Timestamps are printed in UTC, with microseconds.
+        """
+        args = ["show", "--timestamp=us+utc", "--property", ",".join(properties)]
+        if unit is not None:
+            args += ["--", unit]
+        stdout, stderr, return_code = self.systemctl(resource, *args)
+        if return_code != 0:
+            raise RuntimeError(
+                f"Failed to read {', '.join(properties)} of {unit or 'the service manager'} "
+                f"(return code {return_code}): {stderr}"
+            )
+        return dict(
+            line.split("=", maxsplit=1) for line in stdout.splitlines() if "=" in line
+        )
+
+    def last_modified(self, paths: Sequence[str], depth: int) -> float | None:
+        """
+        Get the most recent modification time (seconds since the epoch) of the
+        given paths, and of what they contain, up to the given depth.  Return
+        None if none of them exist.  The modification time of a directory
+        changes when an entry is added to or removed from it.
+        """
+        if not paths:
+            return None
+        # Missing paths are reported on stderr, they simply have no modification time
+        stdout, _, _ = self.proxy.run(
+            "find", ["-P", *paths, "-maxdepth", str(depth), "-printf", "%T@\\n"]
+        )
+        return max(
+            (float(line) for line in stdout.splitlines() if line.strip()), default=None
+        )
 
     def host_time(self) -> str | None:
         """
@@ -142,39 +206,6 @@ class SystemctlHandler(inmanta_plugins.mitogen.abc.Handler[R]):
             message += "\n\n" + self.journal(resource, unit, since)
         raise RuntimeError(message)
 
-    def can_reload(self) -> bool:
-        return True
-
-    def do_reload(self, ctx: inmanta.agent.handler.HandlerContext, resource: R) -> None:
-        """
-        Called after the resource has been deployed, when any of its
-        dependencies changed since its last successful deployment.  The base
-        handler takes care of the remote connection and of the errors, the
-        actual reload is delegated to the reload method.
-        """
-        if ctx.status is not const.ResourceState.deployed:
-            # The resource failed or was skipped, there is nothing to reload
-            return
-
-        try:
-            self.pre(ctx, resource)
-            self.reload(ctx, resource)
-        except Exception as e:
-            ctx.set_resource_state(const.HandlerResourceState.failed)
-            ctx.exception(
-                "An error occurred while reloading %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id.resource_str(),
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            self.post(ctx, resource)
-
-    def reload(self, ctx: inmanta.agent.handler.HandlerContext, resource: R) -> None:
-        """
-        Reload the resource, because one of its dependencies changed.
-        """
-        raise NotImplementedError()
-
 
 @inmanta.resources.resource(
     name="files::SystemdDaemonReload",
@@ -182,8 +213,10 @@ class SystemctlHandler(inmanta_plugins.mitogen.abc.Handler[R]):
     agent="host.name",
 )
 class SystemdDaemonReloadResource(SystemctlResource):
-    fields = ("manager",)  # type: ignore[assignment]
+    fields = ("manager", "paths", "loaded")  # type: ignore[assignment]
     manager: str
+    paths: list[str]
+    loaded: bool
 
     @classmethod
     def get_manager(
@@ -193,41 +226,74 @@ class SystemdDaemonReloadResource(SystemctlResource):
     ) -> str:
         return manager_name(entity.user)
 
+    @classmethod
+    def get_paths(
+        cls,
+        _: inmanta.export.Exporter,
+        entity: inmanta.execute.proxy.DynamicProxy,
+    ) -> list[str]:
+        # Filled in by the dependency manager, with the folders of the unit files
+        return []
+
+    @classmethod
+    def get_loaded(
+        cls,
+        _: inmanta.export.Exporter,
+        entity: inmanta.execute.proxy.DynamicProxy,
+    ) -> bool:
+        return True
+
 
 @inmanta.agent.handler.provider("files::SystemdDaemonReload", "")
-class SystemdDaemonReloadHandler(
-    SystemctlHandler[SystemdDaemonReloadResource],
-    inmanta.agent.handler.ResourceHandler[SystemdDaemonReloadResource],
-):
+class SystemdDaemonReloadHandler(SystemctlHandler[SystemdDaemonReloadResource]):
     """
-    The resource has no state, it reloads the service manager when one of its
-    dependencies changed.  The reload is not reported as a change: the units
-    restarting on changes depend on their own files, they shouldn't restart
-    because any unit file of the host changed.
+    The service manager has loaded its units if none of the files it loads them
+    from changed since it last did: the files in its unit paths (and their
+    drop-in folders), and in the folders of the unit files managed on the host
+    (e.g. the quadlet files, that a generator turns into units).
     """
 
-    def check_resource(
+    def read_resource(
         self,
         ctx: inmanta.agent.handler.HandlerContext,
         resource: SystemdDaemonReloadResource,
-    ) -> SystemdDaemonReloadResource:
-        return resource
-
-    def do_changes(
-        self,
-        ctx: inmanta.agent.handler.HandlerContext,
-        resource: SystemdDaemonReloadResource,
-        changes: typing.Mapping[str, typing.Mapping[str, object]],
     ) -> None:
-        pass
+        manager = self.show(resource, "UnitPath", "UnitsLoadTimestamp")
+        loaded_at = parse_timestamp(manager.get("UnitsLoadTimestamp", ""))
+        paths = [
+            p
+            for p in manager.get("UnitPath", "").split()
+            if not SYSTEMD_OWNED_PATH.search(p)
+        ]
+        modified_at = self.last_modified([*paths, *resource.paths], depth=2)
+        ctx.debug(
+            "Units loaded at %(loaded_at)s, unit files modified at %(modified_at)s",
+            loaded_at=str(loaded_at),
+            modified_at=str(modified_at),
+        )
+        resource.loaded = loaded_at is not None and (
+            modified_at is None or modified_at <= loaded_at
+        )
 
-    def reload(
+    def calculate_diff(
         self,
         ctx: inmanta.agent.handler.HandlerContext,
+        current: SystemdDaemonReloadResource,
+        desired: SystemdDaemonReloadResource,
+    ) -> dict[str, dict[str, typing.Any]]:
+        if desired.purged:
+            # The service manager can't be removed, we simply stop reloading it
+            return {}
+        return super().calculate_diff(ctx, current, desired)
+
+    def update_resource(
+        self,
+        ctx: inmanta.agent.handler.HandlerContext,
+        changes: dict[str, dict[str, object]],
         resource: SystemdDaemonReloadResource,
     ) -> None:
         self.run_systemctl(resource, "daemon-reload")
-        ctx.info("Reloaded the %(manager)s service manager", manager=resource.manager)
+        ctx.set_updated()
 
 
 @inmanta.resources.resource(
@@ -235,14 +301,21 @@ class SystemdDaemonReloadHandler(
     id_attribute="unit",
     agent="host.name",
 )
-class SystemdUnitResource(SystemctlResource, inmanta_plugins.mitogen.abc.ResourceABC):
-    fields = ("unit", "name", "enabled", "active")  # type: ignore[assignment]
+class SystemdUnitResource(SystemctlResource):
+    fields = (  # type: ignore[assignment]
+        "unit",
+        "name",
+        "enabled",
+        "active",
+        "config_files",
+        "up_to_date",
+    )
     unit: str
     name: str
     enabled: bool | None
     active: bool | None
-    purged: bool
-    receive_events: bool
+    config_files: list[str]
+    up_to_date: bool | None
 
     @classmethod
     def get_unit(
@@ -268,16 +341,25 @@ class SystemdUnitResource(SystemctlResource, inmanta_plugins.mitogen.abc.Resourc
     ) -> bool | None:
         return False if entity.purged else entity.active
 
+    @classmethod
+    def get_up_to_date(
+        cls,
+        _: inmanta.export.Exporter,
+        entity: inmanta.execute.proxy.DynamicProxy,
+    ) -> bool | None:
+        return True if entity.restart_on_change and not entity.purged else None
+
 
 @inmanta.agent.handler.provider("files::SystemdUnit", "")
-class SystemdUnitHandler(
-    SystemctlHandler[SystemdUnitResource],
-    inmanta.agent.handler.CRUDHandler[SystemdUnitResource],
-):
+class SystemdUnitHandler(SystemctlHandler[SystemdUnitResource]):
     """
     Enable/disable and start/stop a unit.  A unit is purged when it is neither
     enabled nor active: its unit file is not ours to remove.  A unit which
     doesn't exist (yet) is skipped, unless it is purged.
+
+    A running unit is up to date when it started after any of its files was
+    last modified: its unit file (or the file it is generated from, e.g. a
+    quadlet file), its drop-ins and its config files.
     """
 
     def read_resource(
@@ -285,15 +367,15 @@ class SystemdUnitHandler(
         ctx: inmanta.agent.handler.HandlerContext,
         resource: SystemdUnitResource,
     ) -> None:
-        stdout, stderr, return_code = self.systemctl(
-            resource, "show", "--property", "LoadState,ActiveState", "--", resource.name
-        )
-        if return_code != 0:
-            raise RuntimeError(
-                f"Failed to read the state of {resource.name} (return code {return_code}): {stderr}"
-            )
-        properties = dict(
-            line.split("=", maxsplit=1) for line in stdout.splitlines() if "=" in line
+        properties = self.show(
+            resource,
+            "LoadState",
+            "ActiveState",
+            "ActiveEnterTimestamp",
+            "FragmentPath",
+            "SourcePath",
+            "DropInPaths",
+            unit=resource.name,
         )
         ctx.debug("Current state of the unit", properties=properties)
         if properties.get("LoadState") == "not-found":
@@ -304,6 +386,33 @@ class SystemdUnitHandler(
             self.systemctl(resource, "is-enabled", "--quiet", "--", resource.name)[2]
             == 0
         )
+
+        if resource.up_to_date is None:
+            # We don't restart the unit on changes, don't bother checking
+            return
+
+        started_at = parse_timestamp(properties.get("ActiveEnterTimestamp", ""))
+        if not resource.active or started_at is None:
+            # Whatever changed will be picked up when the unit starts
+            resource.up_to_date = True
+            return
+
+        files = [
+            path
+            for path in [
+                properties.get("SourcePath") or properties.get("FragmentPath", ""),
+                *properties.get("DropInPaths", "").split(),
+            ]
+            if path and not SYSTEMD_OWNED_PATH.search(path)
+        ]
+        modified_at = self.last_modified([*files, *resource.config_files], depth=0)
+        ctx.debug(
+            "Unit started at %(started_at)s, its files modified at %(modified_at)s",
+            started_at=str(started_at),
+            modified_at=str(modified_at),
+            files=files,
+        )
+        resource.up_to_date = modified_at is None or modified_at <= started_at
 
     def calculate_diff(
         self,
@@ -342,6 +451,10 @@ class SystemdUnitHandler(
                 )
             else:
                 self.run_systemctl(resource, "stop", "--", resource.name)
+        elif "up_to_date" in changes:
+            self.run_systemctl(
+                resource, "restart", "--", resource.name, unit=resource.name
+            )
         if "enabled" in changes and not resource.enabled:
             self.run_systemctl(resource, "disable", "--", resource.name)
         ctx.set_updated()
@@ -354,25 +467,6 @@ class SystemdUnitHandler(
         self.run_systemctl(resource, "disable", "--now", "--", resource.name)
         ctx.set_purged()
 
-    def reload(
-        self,
-        ctx: inmanta.agent.handler.HandlerContext,
-        resource: SystemdUnitResource,
-    ) -> None:
-        if not resource.receive_events or resource.purged or "active" in ctx.changes:
-            # The unit doesn't restart on changes, or it has just been
-            # started or stopped
-            return
-
-        # Only restart the unit if it is running, a stopped unit will pick up
-        # the change when it starts
-        self.run_systemctl(
-            resource, "try-restart", "--", resource.name, unit=resource.name
-        )
-        ctx.info("Restarted %(unit)s, if it was running", unit=resource.name)
-        if ctx.change is const.Change.nochange:
-            ctx.set_updated()
-
 
 @dependency_manager
 def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
@@ -380,11 +474,12 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
     Order the unit files, the service manager reloads and the units of each
     host:
     - every unit file is written (or removed) before the service managers of
-      its host are reloaded: the file doesn't tell which manager loads it,
-      reloading another one does no harm;
+      its host are reloaded, which also look for changes in the folders of
+      these files: the file doesn't tell which manager loads it, and it may
+      not be in a unit path (e.g. a quadlet file, turned into a unit by a
+      generator);
     - every unit is enabled and started once its service manager is reloaded,
-      and once its own unit file is written, so that it restarts when its file
-      changes (if it receives events);
+      and once its own unit file is written;
     - every purged unit is stopped and disabled before its unit file is removed.
     """
     from inmanta_plugins.files.systemd_unit import SystemdUnitFileResource
@@ -405,6 +500,7 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
 
     for (host, _), daemon_reload in reloads.items():
         daemon_reload.requires.update(f.id for f in files[host])
+        daemon_reload.paths = sorted({os.path.dirname(f.path) for f in files[host]})
 
     for unit in units:
         host = unit.id.agent_name

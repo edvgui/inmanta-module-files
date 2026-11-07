@@ -225,10 +225,12 @@ index SystemdUnitFile(host, path)
 implement SystemdUnitFile using std::none
 
 
-entity SystemctlResource extends std::Resource:
+entity SystemctlResource extends std::PurgeableResource:
     """
     Base entity for resources running systemctl commands against a service
     manager: the one of the system, or the one of a user.
+
+    Requires systemd 248 or later.
 
     :attr user: The user whose service manager manages the units, or null
         for the service manager of the system.
@@ -239,6 +241,7 @@ entity SystemctlResource extends std::Resource:
     """
     string? user = null
     string[]? systemctl_command = null
+    bool send_event = true
 end
 SystemctlResource.host [1] -- std::Host
 """
@@ -253,14 +256,16 @@ Dedicated mitogen context to reach the service manager.
 
 entity SystemdDaemonReload extends SystemctlResource:
     """
-    Reload a service manager (systemctl daemon-reload) when any of the
-    resources it requires changed.  Every files::SystemdUnitFile of the host is
-    required automatically, and every files::SystemdUnit of the same service
-    manager requires it.  It is created automatically by files::SystemdUnit.
+    Reload a service manager (systemctl daemon-reload) when any of the files it
+    loads its units from changed since it last loaded them: the files in its
+    unit paths, and in the folders of the files::SystemdUnitFile of the host
+    (e.g. quadlet files, that a generator turns into units).
 
-    The reload is not reported as a change, it doesn't send any event.
+    Every files::SystemdUnitFile of the host is required automatically, and
+    every files::SystemdUnit of the same service manager requires it.  It is
+    created automatically by files::SystemdUnit.  When purged, the service
+    manager is not reloaded anymore.
     """
-    bool receive_events = true
 end
 
 index SystemdDaemonReload(host, user)
@@ -268,7 +273,7 @@ index SystemdDaemonReload(host, user)
 implement SystemdDaemonReload using std::none
 
 
-entity SystemdUnit extends SystemctlResource, std::PurgeableResource, std::ManagedResource:
+entity SystemdUnit extends SystemctlResource, std::ManagedResource:
     """
     Enable/disable and start/stop a systemd unit, which is installed by
     something else (e.g. a files::SystemdUnitFile, a package).  The unit is
@@ -286,14 +291,19 @@ entity SystemdUnit extends SystemctlResource, std::PurgeableResource, std::Manag
     :attr enabled: Whether the unit should be enabled, null to leave it as is.
     :attr active: Whether the unit should be started, null to leave it as is.
     :attr purged: When true, the unit is stopped and disabled.
-    :attr receive_events: When true, the unit is restarted (if it is running)
-        when any of the resources it requires changed, e.g. its unit file.
+    :attr restart_on_change: When true, the unit is restarted if it is running
+        and any of its files has been modified since it started: its unit
+        file (or the file it is generated from, e.g. a quadlet file), its
+        drop-ins, and its config_files.
+    :attr config_files: Other files the unit reads when it starts, e.g. an
+        environment file, which also restart it when they are modified (if
+        restart_on_change is true).
     """
     string name
     bool? enabled = null
     bool? active = null
-    bool send_event = true
-    bool receive_events = false
+    bool restart_on_change = false
+    string[] config_files = []
 end
 SystemdUnit.daemon_reload [1] -- SystemdDaemonReload
 """
