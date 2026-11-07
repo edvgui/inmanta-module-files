@@ -14,6 +14,8 @@ This module allows to manage files, on a unix host.  It contains the following r
 4. `files::JsonFile` and `files::SharedJsonFile`: to manage json file entries.  Similarly to `files::HostFile`, only change in the file what is present in the desired state.  The file can then still be modified by other tools.
 5. `files::SystemdUnitFile`: an entity representing a unit file, which exposes it most useful properties directly in the model.  After being exported, this resource becomes nothing more than a text file.
 6. `files::Symlink`: to manage a symlink, its existence and ownership.
+7. `files::SystemdUnit`: to enable/disable and start/stop a systemd unit, of the system or of a user.  When the unit fails to start, the error contains what the unit logged, from its journal.  The unit can also be restarted whenever any of its dependencies changes (e.g. its unit file).
+8. `files::SystemdDaemonReload`: to reload a systemd service manager (`systemctl daemon-reload`) whenever any of its dependencies changes.  It is created automatically for each `files::SystemdUnit`, and the exporter makes sure that every `files::SystemdUnitFile` is deployed before the service managers of its host are reloaded, and that every unit is reloaded before it is started.
 
 It also exposes the `files::jinja` plugin, to render a jinja template at compile time while keeping any [reference](https://docs.inmanta.com/community/dev/lsm/reference/references.html) it embeds (e.g. a secret) unresolved.  Such references are then resolved by the agent, on the host, when the resource is deployed.
 
@@ -95,5 +97,52 @@ file = files::TextFile(
 ```
 
 </x-example-jinja>
+
+### Systemd units
+
+The following example writes a unit file, and makes sure that the service it defines is enabled and running, and restarted whenever its unit file changes.
+
+<x-example-systemd>
+
+```
+import mitogen
+import files
+import files::systemd_unit
+
+import std
+
+host = std::Host(
+    name="localhost",
+    os=std::linux,
+    via=mitogen::Local(),
+)
+
+files::SystemdUnitFile(
+    host=host,
+    path="/etc/systemd/system/example.service",
+    permissions=644,
+    service=files::systemd_unit::Service(
+        exec_start="/usr/bin/sleep infinity",
+    ),
+    install=files::systemd_unit::Install(
+        wanted_by=["multi-user.target"],
+    ),
+)
+
+files::SystemdUnit(
+    host=host,
+    name="example.service",
+    enabled=true,
+    active=true,
+    # Restart the service whenever its unit file changes
+    receive_events=true,
+    # No need to explicitly add the dependency to the unit file, or to
+    # reload systemd, the exporter takes care of it:
+    # unit file -> systemctl daemon-reload -> systemctl enable/start
+)
+
+```
+
+</x-example-systemd>
 
 Find more examples in the ´tests` folder of this module!
