@@ -147,3 +147,60 @@ def test_jinja(
 
     tested_model = pathlib.Path(project._test_project_dir, "main.cf").read_text()
     update_example("jinja", tested_model)
+
+
+def test_systemd(
+    project: Project,
+) -> None:
+    model = """
+        import mitogen
+        import files
+        import files::systemd_unit
+
+        import std
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        files::SystemdUnitFile(
+            host=host,
+            path="/etc/systemd/system/example.service",
+            permissions=644,
+            service=files::systemd_unit::Service(
+                exec_start="/usr/bin/sleep infinity",
+            ),
+            install=files::systemd_unit::Install(
+                wanted_by=["multi-user.target"],
+            ),
+        )
+
+        files::SystemdUnit(
+            host=host,
+            name="example.service",
+            enabled=true,
+            active=true,
+            # Restart the service when its unit file changed since it started
+            restart_on_change=true,
+            # No need to explicitly add the dependency to the unit file, or to
+            # reload systemd, the exporter takes care of it:
+            # unit file -> systemctl daemon-reload -> systemctl enable/start
+        )
+    """
+
+    project.compile(model, no_dedent=False)
+
+    # Verify that the requirements are wired automatically
+    file = project.get_resource("files::SystemdUnitFile")
+    assert file is not None
+    reload = project.get_resource("files::SystemdDaemonReload")
+    assert reload is not None
+    unit = project.get_resource("files::SystemdUnit")
+    assert unit is not None
+    assert file.id in reload.requires
+    assert {file.id, reload.id} <= unit.requires
+
+    tested_model = pathlib.Path(project._test_project_dir, "main.cf").read_text()
+    update_example("systemd", tested_model)

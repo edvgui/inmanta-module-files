@@ -1,7 +1,9 @@
 # Changelog
 
-## v2.11.2 - ?
+## v2.12.0 - ?
 
+- Add files::SystemdUnit resource, to enable/disable and start/stop systemd units, restart them when their files changed, and report the journal of the units that fail to start.
+- Add files::SystemdDaemonReload resource, to reload systemd service managers when their unit files changed.
 
 ## v2.11.1 - 2026-06-28
 

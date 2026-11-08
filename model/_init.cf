@@ -225,6 +225,118 @@ index SystemdUnitFile(host, path)
 implement SystemdUnitFile using std::none
 
 
+entity SystemctlResource extends std::PurgeableResource:
+    """
+    Base entity for resources running systemctl commands against a service
+    manager: the one of the system, or the one of a user.
+
+    Requires systemd 248 or later.
+
+    :attr user: The user whose service manager manages the units, or null
+        for the service manager of the system.  For a user, the commands run
+        with systemctl --user and journalctl --user-unit, the via context must
+        run them as that user.
+    """
+    string? user = null
+    bool send_event = true
+end
+SystemctlResource.host [1] -- std::Host
+"""
+The host the service manager runs on.
+"""
+
+SystemctlResource.via [0:1] -- mitogen::Context
+"""
+Dedicated mitogen context to reach the service manager.  All the
+files::SystemdUnit of a service manager must use the same context, as they
+share its files::SystemdDaemonReload.
+"""
+
+
+entity SystemdDaemonReload extends SystemctlResource:
+    """
+    Reload a service manager (systemctl daemon-reload) when any of the files it
+    loads its units from changed since it last loaded them: the files in its
+    unit paths, and in the folders of the files of the host it requires, which
+    are identified by their path (e.g. quadlet files, that a generator turns
+    into units).
+
+    Every files::SystemdUnitFile of the host is required automatically, other
+    files (e.g. quadlet files) can be added to its requires relation.  Every
+    files::SystemdUnit of the same service manager requires it.  It is created
+    automatically by files::SystemdUnit.
+    """
+end
+
+index SystemdDaemonReload(host, user)
+
+implement SystemdDaemonReload using std::none
+
+
+entity SystemdUnit extends SystemctlResource, std::ManagedResource:
+    """
+    Enable/disable and start/stop a systemd unit, which is installed by
+    something else (e.g. a files::SystemdUnitFile, a package).  The unit is
+    skipped as long as it doesn't exist.
+
+    Every files::SystemdUnitFile of the host with the same name as the unit is
+    required automatically, as are its config_files and the
+    files::SystemdDaemonReload of its service manager.  When the unit is
+    purged, it is stopped and disabled before its unit file is removed.  Purged
+    config_files are removed after the unit is deployed.  A unit file in one
+    of the standard unit folders of the service manager (e.g.
+    /etc/systemd/system) can only be removed if its unit is purged too,
+    otherwise the export fails.  The dependencies set in the model are never
+    removed: a warning is logged at export for the ones going the wrong way.
+
+    When the unit fails to start, the error contains what it logged, if the
+    journal of the unit can be read.
+
+    :attr name: The name of the unit, e.g. podman.socket.
+    :attr enabled: Whether the unit should be enabled, null to leave it as is.
+    :attr active: Whether the unit should be started, null to leave it as is.
+    :attr purged: When true, the unit is stopped and disabled.
+    :attr restart_on_change: When true, the unit is restarted if it is running
+        and any of its files has been modified since it started: its unit
+        file (or the file it is generated from, e.g. a quadlet file), its
+        drop-ins, and its config_files.
+    """
+    string name
+    bool? enabled = null
+    bool? active = null
+    bool restart_on_change = false
+end
+SystemdUnit.daemon_reload [1] -- SystemdDaemonReload
+"""
+The reload of the service manager of the unit.
+"""
+
+SystemdUnit.config_files [0:] -- BaseFile
+"""
+Other files the unit reads when it starts, e.g. an environment file.  They are
+deployed before the unit, and restart it when they are modified (if
+restart_on_change is true).  The ones that are purged are removed after the
+unit is deployed (e.g. stopped), so that it can still stop correctly.
+"""
+
+index SystemdUnit(host, user, name)
+
+implement SystemdUnit using systemd_daemon_reload
+
+
+implementation systemd_daemon_reload for SystemdUnit:
+    """
+    Make sure that the service manager of the unit is reloaded when its unit
+    files change.
+    """
+    self.daemon_reload = SystemdDaemonReload(
+        host=self.host,
+        user=self.user,
+        via=self.via is defined ? self.via : null,
+    )
+end
+
+
 entity Directory extends BaseFile:
     """
     Create a directory on the host.
