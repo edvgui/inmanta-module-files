@@ -18,6 +18,7 @@ Contact: edvgui@gmail.com
 
 import collections
 import datetime
+import logging
 import os
 import re
 import typing
@@ -30,6 +31,8 @@ import inmanta.execute.proxy
 import inmanta.export
 import inmanta.resources
 from inmanta.export import ModelDict, ResourceDict, dependency_manager
+
+LOGGER = logging.getLogger(__name__)
 
 # The unit paths systemd writes to itself: generated units are rewritten on
 # every reload, transient and control units are loaded as soon as they are
@@ -494,10 +497,10 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
     - every unit is deployed once its service manager is reloaded, and once
       its own unit file is written: a purged unit may not exist yet;
     - every purged unit is stopped and disabled before its unit file is
-      removed, even if the model says otherwise.  It then doesn't wait for
-      the reload, which waits for the removal, nor for any other removal the
-      reload waits for, if it must happen after the unit is stopped (e.g. a
-      quadlet file).
+      removed, unless the model says otherwise (with a warning).  It then
+      doesn't wait for the reload, which waits for the removal, nor for any
+      other removal the reload waits for, if it must happen after the unit is
+      stopped (e.g. a quadlet file).
 
     A unit file which is surely loaded by the service manager of a unit can
     only be removed if the unit is purged: otherwise the unit is skipped once
@@ -528,8 +531,14 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
         for unit_file in files[host]:
             if os.path.basename(unit_file.path) != unit.name:
                 continue
-            if unit.purged and unit_file.purged:
-                unit.requires.discard(unit_file.id)
+            if unit.purged and unit_file.purged and unit_file.id in unit.requires:
+                LOGGER.warning(
+                    "The unit file %s is removed before %s is stopped, which may not "
+                    "stop correctly: the unit should not require its unit file.",
+                    unit_file.path,
+                    unit.id,
+                )
+            elif unit.purged and unit_file.purged:
                 unit_file.requires.add(unit.id)
             elif unit_file.purged and os.path.dirname(unit_file.path) in unit_paths:
                 raise ValueError(

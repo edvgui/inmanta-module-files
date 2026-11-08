@@ -159,13 +159,16 @@ def deploy_unit_file(project: pytest_inmanta.plugin.Project) -> None:
     project.deploy_resource(RELOAD, change=const.Change.nochange)
 
 
-def test_model(project: pytest_inmanta.plugin.Project) -> None:
+def test_model(
+    project: pytest_inmanta.plugin.Project, caplog: pytest.LogCaptureFixture
+) -> None:
     """
     All the units of a service manager share its reload, which happens after
     the unit files changed and before the units are deployed.  A purged unit is
     stopped before its removed files are, so it can't wait for the reload
     then, it doesn't need it either.  A unit file which is surely loaded by
     the service manager of a unit can only be removed if the unit is purged.
+    The order the model sets is kept, with a warning if it is wrong.
     """
     model = """
         import files
@@ -181,10 +184,14 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
         files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/u.service")
         files::SystemdUnit(host=host, name="u.service", user="me", active=true)
 
-        # Stopped before its files are removed, even if the model says otherwise
+        # Stopped before its files are removed
         b_config = files::TextFile(host=host, path="/etc/b.env", content="", purged=true)
-        b_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
-        files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config], requires=[b_file])
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
+        files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config])
+
+        # The model says otherwise, it is kept
+        g_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/g.service", purged=true)
+        files::SystemdUnit(host=host, name="g.service", purged=true, requires=[g_file])
 
         # Stopped after its file is written and loaded, it may not exist yet
         files::SystemdUnitFile(host=host, path="/etc/systemd/system/c.service")
@@ -251,6 +258,14 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     assert (b.enabled, b.active) == (False, False)
     for removed in [unit_file("b.service"), rid("files::TextFile", "/etc/b.env")]:
         assert b.id in project.resources[removed].requires
+
+    g = get_unit(project, "system/g.service")
+    assert g.requires == {system_reload.id, unit_file("g.service")}
+    assert g.id not in project.resources[unit_file("g.service")].requires
+    assert (
+        "/etc/systemd/system/g.service is removed before files::SystemdUnit"
+        in caplog.text
+    )
 
     c = get_unit(project, "system/c.service")
     assert c.requires == {system_reload.id, unit_file("c.service")}
