@@ -234,8 +234,8 @@ entity SystemctlResource extends std::PurgeableResource:
 
     :attr user: The user whose service manager manages the units, or null
         for the service manager of the system.  For a user, the commands run
-        with systemctl --user and journalctl --user, the via context must run
-        them as that user.
+        with systemctl --user and journalctl --user-unit, the via context must
+        run them as that user.
     """
     string? user = null
     bool send_event = true

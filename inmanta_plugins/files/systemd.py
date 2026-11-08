@@ -162,9 +162,13 @@ class SystemctlHandler(inmanta_plugins.mitogen.abc.HandlerABC[R]):
         journalctl exits with 0 when it can't read the journal (e.g. the user
         is not in the systemd-journal group), it only says so on stderr, which
         is kept, so that an empty journal is never mistaken for a silent unit.
+
+        The unit of a user is looked up with --user-unit, in all the journal
+        files the user can read: --user only reads the journal files of the
+        user, which don't exist with volatile storage, or for system users.
         """
-        journalctl = ["--user"] if resource.user is not None else []
-        journalctl += ["--unit", unit, "--lines", "50", "--no-pager"]
+        journalctl = ["--user-unit" if resource.user is not None else "--unit", unit]
+        journalctl += ["--lines", "50", "--no-pager"]
         if since is not None:
             journalctl += ["--since", f"@{since}"]
 
