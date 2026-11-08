@@ -491,11 +491,13 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
       the files they require: the file doesn't tell which manager loads it,
       and it may not be in a unit path (e.g. a quadlet file, turned into a
       unit by a generator);
-    - every unit is enabled and started once its service manager is reloaded,
-      and once its own unit file is written;
+    - every unit is deployed once its service manager is reloaded, and once
+      its own unit file is written: a purged unit may not exist yet;
     - every purged unit is stopped and disabled before its unit file is
-      removed, even if the model says otherwise, or after it is written if
-      the file is kept.
+      removed, even if the model says otherwise.  It then doesn't wait for
+      the reload, which waits for the removal, nor for any other removal the
+      reload waits for, if it must happen after the unit is stopped (e.g. a
+      quadlet file).
 
     A unit file which is surely loaded by the service manager of a unit can
     only be removed if the unit is purged: otherwise the unit is skipped once
@@ -522,25 +524,30 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
 
     for unit in units:
         host = unit.id.agent_name
-        unit_files = [f for f in files[host] if os.path.basename(f.path) == unit.name]
-        if unit.purged:
-            for unit_file in unit_files:
-                if unit_file.purged:
-                    unit.requires.discard(unit_file.id)
-                    unit_file.requires.add(unit.id)
-                else:
-                    unit.requires.add(unit_file.id)
-            continue
-
         unit_paths = SYSTEM_UNIT_PATHS if unit.user is None else USER_UNIT_PATHS
-        for unit_file in unit_files:
-            if unit_file.purged and os.path.dirname(unit_file.path) in unit_paths:
+        for unit_file in files[host]:
+            if os.path.basename(unit_file.path) != unit.name:
+                continue
+            if unit.purged and unit_file.purged:
+                unit.requires.discard(unit_file.id)
+                unit_file.requires.add(unit.id)
+            elif unit_file.purged and os.path.dirname(unit_file.path) in unit_paths:
                 raise ValueError(
                     f"The unit file {unit_file.path} is removed, but {unit.id} is not "
                     "purged.  The unit would not be stopped, set purged=true on it."
                 )
+            else:
+                unit.requires.add(unit_file.id)
 
-        unit.requires.update(f.id for f in unit_files)
         unit_reload = reloads.get((host, manager_name(unit.user)))
-        if unit_reload is not None:
-            unit.requires.add(unit_reload.id)
+        if unit_reload is None:
+            continue
+        if unit.purged and any(
+            unit.id in resources[r].requires
+            for r in unit_reload.requires
+            if r in resources
+        ):
+            # The unit is stopped before one of the files the reload loads is
+            # removed: it can't wait for the reload, and it exists already.
+            continue
+        unit.requires.add(unit_reload.id)

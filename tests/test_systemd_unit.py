@@ -28,11 +28,11 @@ import pytest
 import pytest_inmanta.plugin
 
 from inmanta import const
+from inmanta.resources import Id
 from inmanta_plugins.files.systemd import (
     SystemdDaemonReloadResource,
     SystemdUnitResource,
 )
-from inmanta_plugins.files.systemd_unit import SystemdUnitFileResource
 
 UNIT = "files::SystemdUnit"
 RELOAD = "files::SystemdDaemonReload"
@@ -162,82 +162,10 @@ def deploy_unit_file(project: pytest_inmanta.plugin.Project) -> None:
 def test_model(project: pytest_inmanta.plugin.Project) -> None:
     """
     All the units of a service manager share its reload, which happens after
-    the unit files changed and before the units are started.  A purged unit is
-    stopped before its file is removed.  The config files of a unit are
-    deployed before it, unless they are removed: then the unit is stopped first.
-    """
-    project.compile("""
-        import files
-        import mitogen
-        import std
-
-        host = std::Host(name="localhost", os=std::linux, via=mitogen::Local())
-
-        files::SystemdUnitFile(host=host, path="/etc/systemd/system/a.service")
-        files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
-        files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/a.service")
-
-        config = files::TextFile(host=host, path="/etc/a.env", content="")
-        files::SystemdUnit(host=host, name="a.service", active=true, config_files=[config])
-        b_config = files::TextFile(host=host, path="/etc/b.env", content="", purged=true)
-        files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config])
-        files::SystemdUnit(host=host, name="c.service", enabled=false)
-        files::SystemdUnit(host=host, name="a.service", user="me", active=true)
-    """)
-
-    system_reload = get_reload(project, "system")
-    user_reload = get_reload(project, "user/me")
-    assert system_reload.systemctl_command == ["systemctl"]
-    assert user_reload.systemctl_command == ["systemctl", "--user"]
-    assert len([r for r in project.resources.values() if r.is_type(RELOAD)]) == 2
-
-    files = {
-        r.path: r
-        for r in typing.cast(
-            list[SystemdUnitFileResource],
-            [r for r in project.resources.values() if r.is_type(FILE)],
-        )
-    }
-    a_file = files["/etc/systemd/system/a.service"]
-    b_file = files["/etc/systemd/system/b.service"]
-    user_a_file = files["/home/me/.config/systemd/user/a.service"]
-
-    # Every unit file of the host is loaded by the reloads
-    for reload in [system_reload, user_reload]:
-        assert {a_file.id, b_file.id, user_a_file.id} <= reload.requires
-
-    a = get_unit(project, "system/a.service")
-    b = get_unit(project, "system/b.service")
-    c = get_unit(project, "system/c.service")
-    user_a = get_unit(project, "user/me/a.service")
-
-    # The units start once their manager is reloaded, and their files are written
-    config = project.get_resource("files::TextFile", path="/etc/a.env")
-    assert config is not None
-    assert a.requires == {system_reload.id, a_file.id, user_a_file.id, config.id}
-    assert a.config_files == ["/etc/a.env"]
-    assert c.requires == {system_reload.id}
-    assert user_a.requires == {user_reload.id, a_file.id, user_a_file.id}
-    assert (a.enabled, a.active) == (None, True)
-    assert (c.enabled, c.active) == (False, None)
-
-    # The purged unit is stopped and disabled before its files are removed
-    b_config = project.get_resource("files::TextFile", path="/etc/b.env")
-    assert b_config is not None
-    assert b.requires == set()
-    assert b.id in b_file.requires
-    assert b.id in b_config.requires
-    assert (b.enabled, b.active) == (False, False)
-
-
-def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
-    """
-    A unit file can only be removed if its unit is purged: the unit is then
-    stopped and disabled before the file is removed, even if the model says
-    otherwise.  Otherwise the unit would be skipped once its file is removed,
-    without ever being stopped.  This is only checked for the unit files
-    which are surely loaded by the service manager of the unit.  A unit file
-    that is kept is still deployed before its purged unit.
+    the unit files changed and before the units are deployed.  A purged unit is
+    stopped before its removed files are, so it can't wait for the reload
+    then, it doesn't need it either.  A unit file which is surely loaded by
+    the service manager of a unit can only be removed if the unit is purged.
     """
     model = """
         import files
@@ -246,45 +174,104 @@ def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
 
         host = std::Host(name="localhost", os=std::linux, via=mitogen::Local())
 
-        # Both purged: the unit is stopped before the file is removed
-        a_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/a.service", purged=true)
-        files::SystemdUnit(host=host, name="a.service", purged=true, requires=[a_file])
+        # Started after its files and the reload
+        a_config = files::TextFile(host=host, path="/etc/a.env", content="")
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/a.service")
+        files::SystemdUnit(host=host, name="a.service", active=true, config_files=[a_config])
+        files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/u.service")
+        files::SystemdUnit(host=host, name="u.service", user="me", active=true)
 
-        # Only the unit is purged: the file is deployed first
-        files::SystemdUnitFile(host=host, path="/etc/systemd/system/f.service")
-        files::SystemdUnit(host=host, name="f.service", purged=true)
+        # Stopped before its files are removed, even if the model says otherwise
+        b_config = files::TextFile(host=host, path="/etc/b.env", content="", purged=true)
+        b_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
+        files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config], requires=[b_file])
+
+        # Stopped after its file is written and loaded, it may not exist yet
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/c.service")
+        files::SystemdUnit(host=host, name="c.service", purged=true)
 
         # Not loaded by the service manager of the unit, or not for sure
-        files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
-        files::SystemdUnit(host=host, name="b.service", user="me", active=true)
-        files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/c.service", purged=true)
-        files::SystemdUnit(host=host, name="c.service", user="me", active=true)
-        files::SystemdUnitFile(host=host, path="/opt/app/d.service", purged=true)
-        files::SystemdUnit(host=host, name="d.service", active=true)
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/d.service", purged=true)
+        files::SystemdUnit(host=host, name="d.service", user="me", active=true)
+        files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/e.service", purged=true)
+        files::SystemdUnit(host=host, name="e.service", user="me", active=true)
+
+        # A quadlet file, removed after its unit is stopped
+        q = files::SystemdUnit(host=host, name="q.service", purged=true)
+        files::SystemdDaemonReload(
+            host=host,
+            requires=[
+                files::TextFile(
+                    host=host,
+                    path="/etc/containers/systemd/q.container",
+                    content="",
+                    purged=true,
+                    requires=[q],
+                ),
+            ],
+        )
     """
     project.compile(model)
 
+    system_reload = get_reload(project, "system")
+    user_reload = get_reload(project, "user/me")
+    assert system_reload.systemctl_command == ["systemctl"]
+    assert user_reload.systemctl_command == ["systemctl", "--user"]
+    assert len([r for r in project.resources.values() if r.is_type(RELOAD)]) == 2
+
+    def rid(entity: str, path: str) -> Id:
+        resource = project.get_resource(entity, path=path)
+        assert resource is not None
+        return resource.id
+
+    def unit_file(name: str) -> Id:
+        return rid(FILE, f"/etc/systemd/system/{name}")
+
+    def user_unit_file(name: str) -> Id:
+        return rid(FILE, f"/home/me/.config/systemd/user/{name}")
+
+    # Every unit file of the host is loaded by the reloads
+    unit_files = {r.id for r in project.resources.values() if r.is_type(FILE)}
+    assert unit_files <= system_reload.requires
+    assert unit_files <= user_reload.requires
+
     a = get_unit(project, "system/a.service")
-    a_file = project.get_resource(FILE, path="/etc/systemd/system/a.service")
-    assert a_file is not None
-    assert a_file.id not in a.requires
-    assert a.id in a_file.requires
+    assert a.requires == {
+        system_reload.id,
+        unit_file("a.service"),
+        rid("files::TextFile", "/etc/a.env"),
+    }
+    assert a.config_files == ["/etc/a.env"]
+    assert (a.enabled, a.active) == (None, True)
+    u = get_unit(project, "user/me/u.service")
+    assert u.requires == {user_reload.id, user_unit_file("u.service")}
 
-    f = get_unit(project, "system/f.service")
-    f_file = project.get_resource(FILE, path="/etc/systemd/system/f.service")
-    assert f_file is not None
-    assert f.requires == {f_file.id}
-    assert f.id not in f_file.requires
+    b = get_unit(project, "system/b.service")
+    assert b.requires == set()
+    assert (b.enabled, b.active) == (False, False)
+    for removed in [unit_file("b.service"), rid("files::TextFile", "/etc/b.env")]:
+        assert b.id in project.resources[removed].requires
 
-    # The unit file of the system manager is removed, but its unit is not purged
+    c = get_unit(project, "system/c.service")
+    assert c.requires == {system_reload.id, unit_file("c.service")}
+
+    d = get_unit(project, "user/me/d.service")
+    assert d.requires == {user_reload.id, unit_file("d.service")}
+    e = get_unit(project, "user/me/e.service")
+    assert e.requires == {user_reload.id, user_unit_file("e.service")}
+
+    q = get_unit(project, "system/q.service")
+    assert q.requires == set()
+
+    # The unit file is removed, but its unit is not purged
     for path, user in [
-        ("/etc/systemd/system/e.service", "null"),
-        ("/usr/lib/systemd/user/e.service", '"me"'),
+        ("/etc/systemd/system/f.service", "null"),
+        ("/usr/lib/systemd/user/f.service", '"me"'),
     ]:
-        with pytest.raises(ValueError, match=r"e\.service\] is not purged"):
+        with pytest.raises(ValueError, match=r"f\.service\] is not purged"):
             project.compile(model + f"""
                 files::SystemdUnitFile(host=host, path="{path}", purged=true)
-                files::SystemdUnit(host=host, name="e.service", user={user}, active=false)
+                files::SystemdUnit(host=host, name="f.service", user={user}, active=false)
                 """)
 
 
