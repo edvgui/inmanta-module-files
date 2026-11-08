@@ -287,7 +287,8 @@ entity SystemdUnit extends SystemctlResource, std::ManagedResource:
     Every files::SystemdUnitFile of the host with the same name as the unit is
     required automatically, as are its config_files and the
     files::SystemdDaemonReload of its service manager.  When the unit is
-    purged, it is stopped and disabled before its unit file is removed.
+    purged, it is stopped and disabled before its unit file is removed.  Purged
+    config_files are removed after the unit is deployed.
 
     When the unit fails to start, the error contains what it logged, if the
     journal of the unit can be read.
@@ -315,7 +316,8 @@ SystemdUnit.config_files [0:] -- BaseFile
 """
 Other files the unit reads when it starts, e.g. an environment file.  They are
 deployed before the unit, and restart it when they are modified (if
-restart_on_change is true).
+restart_on_change is true).  The ones that are purged are removed after the
+unit is deployed (e.g. stopped), so that it can still stop correctly.
 """
 
 index SystemdUnit(host, user, name)
@@ -340,9 +342,16 @@ end
 implementation systemd_config_files for SystemdUnit:
     """
     Deploy the config files of the unit before it, to restart it right away
-    when they change.
+    when they change.  Removed config files are removed after the unit is
+    deployed, so that it can still stop correctly.
     """
-    self.requires = self.config_files
+    for config_file in self.config_files:
+        if config_file.purged:
+            config_file.requires = self
+        else:
+            self.requires = config_file
+        end
+    end
 end
 
 

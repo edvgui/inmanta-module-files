@@ -164,7 +164,7 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     All the units of a service manager share its reload, which happens after
     the unit files changed and before the units are started.  A purged unit is
     stopped before its file is removed.  The config files of a unit are
-    deployed before it.
+    deployed before it, unless they are removed: then the unit is stopped first.
     """
     project.compile("""
         import files
@@ -179,7 +179,8 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
 
         config = files::TextFile(host=host, path="/etc/a.env", content="")
         files::SystemdUnit(host=host, name="a.service", active=true, config_files=[config])
-        files::SystemdUnit(host=host, name="b.service", purged=true)
+        b_config = files::TextFile(host=host, path="/etc/b.env", content="", purged=true)
+        files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config])
         files::SystemdUnit(host=host, name="c.service", enabled=false)
         files::SystemdUnit(host=host, name="a.service", user="me", active=true)
     """)
@@ -220,9 +221,12 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     assert (a.enabled, a.active) == (None, True)
     assert (c.enabled, c.active) == (False, None)
 
-    # The purged unit is stopped and disabled before its file is removed
+    # The purged unit is stopped and disabled before its files are removed
+    b_config = project.get_resource("files::TextFile", path="/etc/b.env")
+    assert b_config is not None
     assert b.requires == set()
     assert b.id in b_file.requires
+    assert b.id in b_config.requires
     assert (b.enabled, b.active) == (False, False)
 
 
