@@ -382,10 +382,12 @@ class SystemdUnitHandler(SystemctlHandler[SystemdUnitResource]):
             raise inmanta.agent.handler.ResourcePurged()
 
         resource.active = properties.get("ActiveState") in ["active", "reloading"]
-        resource.enabled = (
-            self.systemctl(resource, "is-enabled", "--quiet", "--", resource.name)[2]
-            == 0
+        stdout, _, return_code = self.systemctl(
+            resource, "is-enabled", "--", resource.name
         )
+        if stdout.strip() not in ("static", "generated", "transient"):
+            # Units without an [Install] section can't be enabled or disabled
+            resource.enabled = return_code == 0
 
         if resource.up_to_date is None:
             # We don't restart the unit on changes, don't bother checking

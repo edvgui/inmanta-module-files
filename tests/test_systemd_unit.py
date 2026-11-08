@@ -76,6 +76,8 @@ def unit_model(
     file_purged: bool = False,
     unit_purged: bool = False,
     restart_on_change: bool = False,
+    enabled: bool = True,
+    install: bool = True,
     config_files: collections.abc.Sequence[pathlib.Path] = (),
 ) -> str:
     path = pathlib.Path.home() / ".config/systemd/user" / name
@@ -103,14 +105,14 @@ def unit_model(
                 exec_start={json.dumps(exec_start)},
                 type={json.dumps(service_type)},
             ),
-            install=files::systemd_unit::Install(wanted_by=["default.target"]),
+            install={'files::systemd_unit::Install(wanted_by=["default.target"])' if install else "null"},
         )
 
         files::SystemdUnit(
             host=host,
             user={json.dumps(getpass.getuser())},
             name={json.dumps(name)},
-            enabled=true,
+            enabled={json.dumps(enabled)},
             active=true,
             purged={json.dumps(unit_purged)},
             restart_on_change={json.dumps(restart_on_change)},
@@ -298,3 +300,22 @@ def test_deploy_failure(project: pytest_inmanta.plugin.Project, unit_name: str) 
     errors = "\n".join(str(log._data["kwargs"]) for log in project.ctx.logs)
     assert f"Journal of {unit_name}" in errors
     assert marker in errors
+
+
+def test_deploy_static(project: pytest_inmanta.plugin.Project, unit_name: str) -> None:
+    """
+    A unit without [Install] section can't be enabled or disabled, asking for
+    it to be disabled doesn't report a change on every deploy.
+    """
+    project.compile(unit_model(unit_name, enabled=False, install=False))
+    deploy_unit_file(project)
+
+    project.deploy_resource(UNIT, change=const.Change.updated)
+    assert show(unit_name, "ActiveState") == "active"
+    assert show(unit_name, "UnitFileState") == "static"
+    project.deploy_resource(UNIT, change=const.Change.nochange)
+
+    project.compile(unit_model(unit_name, unit_purged=True, install=False))
+    project.deploy_resource(UNIT, change=const.Change.purged)
+    assert show(unit_name, "ActiveState") == "inactive"
+    project.deploy_resource(UNIT, change=const.Change.nochange)
