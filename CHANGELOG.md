@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.12.1 - ?
+
+
 ## v2.12.0 - 2026-11-08
 
 - Add files::SystemdUnit resource, to enable/disable and start/stop systemd units, restart them when their files changed, and report the journal of the units that fail to start.
