@@ -227,8 +227,7 @@ def test_model(
 
     system_reload = get_reload(project, "system")
     user_reload = get_reload(project, "user/me")
-    assert system_reload.systemctl_command == ["systemctl"]
-    assert user_reload.systemctl_command == ["systemctl", "--user"]
+    assert (system_reload.user, user_reload.user) == (None, "me")
     assert len([r for r in project.resources.values() if r.is_type(RELOAD)]) == 2
 
     def rid(entity: str, path: str) -> Id:

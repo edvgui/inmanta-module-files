@@ -90,19 +90,8 @@ class SystemctlResource(inmanta_plugins.mitogen.abc.ResourceABC):
     service manager of the system or of a user.
     """
 
-    fields = ("user", "systemctl_command")  # type: ignore[assignment]
+    fields = ("user",)  # type: ignore[assignment]
     user: str | None
-    systemctl_command: list[str]
-
-    @classmethod
-    def get_systemctl_command(
-        cls,
-        _: inmanta.export.Exporter,
-        entity: inmanta.execute.proxy.DynamicProxy,
-    ) -> list[str]:
-        if entity.systemctl_command is not None:
-            return list(entity.systemctl_command)
-        return ["systemctl"] if entity.user is None else ["systemctl", "--user"]
 
 
 R = typing.TypeVar("R", bound=SystemctlResource)
@@ -115,8 +104,8 @@ class SystemctlHandler(inmanta_plugins.mitogen.abc.HandlerABC[R]):
     """
 
     def systemctl(self, resource: R, *args: str) -> tuple[str, str, int]:
-        command = [*resource.systemctl_command, *args]
-        return self.proxy.run(command[0], command[1:])
+        user = ["--user"] if resource.user is not None else []
+        return self.proxy.run("systemctl", [*user, *args])
 
     def show(
         self, resource: R, *properties: str, unit: str | None = None

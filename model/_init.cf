@@ -233,16 +233,11 @@ entity SystemctlResource extends std::PurgeableResource:
     Requires systemd 248 or later.
 
     :attr user: The user whose service manager manages the units, or null
-        for the service manager of the system.
-    :attr systemctl_command: The systemctl command to run.  When null, it is
-        ["systemctl"] for the service manager of the system, and
-        ["systemctl", "--user"] for the one of a user, in which case the via
-        context must run the commands as that user.  All the files::SystemdUnit
-        of a service manager must use the same systemctl_command, as they
-        share its files::SystemdDaemonReload.
+        for the service manager of the system.  For a user, the commands run
+        with systemctl --user and journalctl --user, the via context must run
+        them as that user.
     """
     string? user = null
-    string[]? systemctl_command = null
     bool send_event = true
 end
 SystemctlResource.host [1] -- std::Host
@@ -337,7 +332,6 @@ implementation systemd_daemon_reload for SystemdUnit:
     self.daemon_reload = SystemdDaemonReload(
         host=self.host,
         user=self.user,
-        systemctl_command=self.systemctl_command,
         via=self.via is defined ? self.via : null,
     )
 end
