@@ -495,68 +495,98 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
       and it may not be in a unit path (e.g. a quadlet file, turned into a
       unit by a generator);
     - every unit is deployed once its service manager is reloaded, and once
-      its own unit file is written: a purged unit may not exist yet;
-    - every purged unit is stopped and disabled before its unit file is
-      removed, unless the model says otherwise (with a warning).  It then
-      doesn't wait for the reload, which waits for the removal, nor for any
-      other removal the reload waits for, if it must happen after the unit is
-      stopped (e.g. a quadlet file).
+      its unit file and config files are written: a purged unit may not exist
+      yet;
+    - every purged unit is stopped and disabled before its unit file and its
+      config files are removed.  It then doesn't wait for the reload, which
+      waits for the removal, nor for any other removal the reload waits for,
+      if it must happen after the unit is stopped (e.g. a quadlet file).
+
+    The dependencies the model sets are never removed, a warning is logged
+    for the ones which go the wrong way.
 
     A unit file which is surely loaded by the service manager of a unit can
     only be removed if the unit is purged: otherwise the unit is skipped once
     its file is removed, without ever being stopped.
     """
+    from inmanta_plugins.files.base import BaseFileResource
     from inmanta_plugins.files.systemd_unit import SystemdUnitFileResource
 
-    files: dict[str, list[SystemdUnitFileResource]] = collections.defaultdict(list)
+    files: dict[tuple[str, str], list[BaseFileResource]] = collections.defaultdict(list)
+    unit_files: dict[str, list[SystemdUnitFileResource]] = collections.defaultdict(list)
     reloads: dict[tuple[str, str], SystemdDaemonReloadResource] = {}
     units: list[SystemdUnitResource] = []
     for resource in resources.values():
         match resource:
             case SystemdUnitFileResource():
-                files[resource.id.agent_name].append(resource)
+                unit_files[resource.id.agent_name].append(resource)
             case SystemdDaemonReloadResource():
                 reloads[(resource.id.agent_name, resource.manager)] = resource
             case SystemdUnitResource():
                 units.append(resource)
             case _:
                 pass
+        if isinstance(resource, BaseFileResource):
+            files[(resource.id.agent_name, resource.path)].append(resource)
+
+    def order(
+        first: inmanta.resources.Resource, then: inmanta.resources.Resource
+    ) -> None:
+        """
+        Deploy first before then, unless the model says otherwise.
+        """
+        if then.id in first.requires:
+            LOGGER.warning(
+                "%s should be deployed before %s, but it requires it", first.id, then.id
+            )
+        else:
+            then.requires.add(first.id)
 
     for (host, _), daemon_reload in reloads.items():
-        daemon_reload.requires.update(f.id for f in files[host])
+        daemon_reload.requires.update(f.id for f in unit_files[host])
 
     for unit in units:
         host = unit.id.agent_name
         unit_paths = SYSTEM_UNIT_PATHS if unit.user is None else USER_UNIT_PATHS
-        for unit_file in files[host]:
+        for unit_file in unit_files[host]:
             if os.path.basename(unit_file.path) != unit.name:
                 continue
-            if unit.purged and unit_file.purged and unit_file.id in unit.requires:
-                LOGGER.warning(
-                    "The unit file %s is removed before %s is stopped, which may not "
-                    "stop correctly: the unit should not require its unit file.",
-                    unit_file.path,
-                    unit.id,
-                )
-            elif unit.purged and unit_file.purged:
-                unit_file.requires.add(unit.id)
-            elif unit_file.purged and os.path.dirname(unit_file.path) in unit_paths:
-                raise ValueError(
-                    f"The unit file {unit_file.path} is removed, but {unit.id} is not "
-                    "purged.  The unit would not be stopped, set purged=true on it."
-                )
+            if unit_file.purged and not unit.purged:
+                if os.path.dirname(unit_file.path) in unit_paths:
+                    raise ValueError(
+                        f"The unit file {unit_file.path} is removed, but {unit.id} is "
+                        "not purged.  The unit would not be stopped, set purged=true "
+                        "on it."
+                    )
+                order(unit_file, unit)
+            elif unit_file.purged:
+                order(unit, unit_file)
             else:
-                unit.requires.add(unit_file.id)
+                order(unit_file, unit)
+
+        for path in unit.config_files:
+            for config_file in files[(host, path)]:
+                if config_file.purged:
+                    order(unit, config_file)
+                else:
+                    order(config_file, unit)
 
         unit_reload = reloads.get((host, manager_name(unit.user)))
         if unit_reload is None:
             continue
-        if unit.purged and any(
-            unit.id in resources[r].requires
+        waiting = [
+            r
             for r in unit_reload.requires
-            if r in resources
-        ):
-            # The unit is stopped before one of the files the reload loads is
-            # removed: it can't wait for the reload, and it exists already.
-            continue
-        unit.requires.add(unit_reload.id)
+            if r in resources and unit.id in resources[r].requires
+        ]
+        if not waiting:
+            order(unit_reload, unit)
+        elif not unit.purged:
+            LOGGER.warning(
+                "%s should be deployed before %s, but it waits for %s, which requires it",
+                unit_reload.id,
+                unit.id,
+                waiting[0],
+            )
+        # Otherwise the unit is stopped before one of the files the reload loads
+        # is removed: it can't wait for the reload, and it exists already.

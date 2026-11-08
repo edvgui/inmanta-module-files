@@ -291,7 +291,8 @@ entity SystemdUnit extends SystemctlResource, std::ManagedResource:
     config_files are removed after the unit is deployed.  A unit file in one
     of the standard unit folders of the service manager (e.g.
     /etc/systemd/system) can only be removed if its unit is purged too,
-    otherwise the export fails.
+    otherwise the export fails.  The dependencies set in the model are never
+    removed: a warning is logged at export for the ones going the wrong way.
 
     When the unit fails to start, the error contains what it logged, if the
     journal of the unit can be read.
@@ -325,7 +326,7 @@ unit is deployed (e.g. stopped), so that it can still stop correctly.
 
 index SystemdUnit(host, user, name)
 
-implement SystemdUnit using systemd_daemon_reload, systemd_config_files
+implement SystemdUnit using systemd_daemon_reload
 
 
 implementation systemd_daemon_reload for SystemdUnit:
@@ -339,22 +340,6 @@ implementation systemd_daemon_reload for SystemdUnit:
         systemctl_command=self.systemctl_command,
         via=self.via is defined ? self.via : null,
     )
-end
-
-
-implementation systemd_config_files for SystemdUnit:
-    """
-    Deploy the config files of the unit before it, to restart it right away
-    when they change.  Removed config files are removed after the unit is
-    deployed, so that it can still stop correctly.
-    """
-    for config_file in self.config_files:
-        if config_file.purged:
-            config_file.requires = self
-        else:
-            self.requires = config_file
-        end
-    end
 end
 
 

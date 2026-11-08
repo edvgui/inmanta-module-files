@@ -168,7 +168,7 @@ def test_model(
     stopped before its removed files are, so it can't wait for the reload
     then, it doesn't need it either.  A unit file which is surely loaded by
     the service manager of a unit can only be removed if the unit is purged.
-    The order the model sets is kept, with a warning if it is wrong.
+    The dependencies the model sets are kept, with a warning if they are wrong.
     """
     model = """
         import files
@@ -190,8 +190,13 @@ def test_model(
         files::SystemdUnit(host=host, name="b.service", purged=true, config_files=[b_config])
 
         # The model says otherwise, it is kept
+        g_config = files::TextFile(host=host, path="/etc/g.env", content="", purged=true)
         g_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/g.service", purged=true)
-        files::SystemdUnit(host=host, name="g.service", purged=true, requires=[g_file])
+        files::SystemdUnit(
+            host=host, name="g.service", purged=true, config_files=[g_config], requires=[g_file, g_config],
+        )
+        h = files::SystemdUnit(host=host, name="h.service", active=true)
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/h.service", requires=[h])
 
         # Stopped after its file is written and loaded, it may not exist yet
         files::SystemdUnitFile(host=host, path="/etc/systemd/system/c.service")
@@ -260,12 +265,16 @@ def test_model(
         assert b.id in project.resources[removed].requires
 
     g = get_unit(project, "system/g.service")
-    assert g.requires == {system_reload.id, unit_file("g.service")}
-    assert g.id not in project.resources[unit_file("g.service")].requires
-    assert (
-        "/etc/systemd/system/g.service is removed before files::SystemdUnit"
-        in caplog.text
-    )
+    g_config = rid("files::TextFile", "/etc/g.env")
+    assert g.requires == {system_reload.id, unit_file("g.service"), g_config}
+    for removed in [unit_file("g.service"), g_config]:
+        assert g.id not in project.resources[removed].requires
+        assert f"{g.id} should be deployed before {removed}" in caplog.text
+
+    # The unit file waits for the unit, which can't wait for the reload then
+    h = get_unit(project, "system/h.service")
+    assert h.requires == set()
+    assert f"{unit_file('h.service')} should be deployed before {h.id}" in caplog.text
 
     c = get_unit(project, "system/c.service")
     assert c.requires == {system_reload.id, unit_file("c.service")}
