@@ -38,6 +38,22 @@ SYSTEMD_OWNED_PATH = re.compile(
     r"/systemd/(generator(\.early|\.late)?|transient)(/|$)|\.control(/|$)"
 )
 
+# The unit folders that are surely loaded by the service manager of the
+# system, and by the ones of all users, whatever their environment is.
+SYSTEM_UNIT_PATHS = {
+    "/etc/systemd/system",
+    "/run/systemd/system",
+    "/usr/local/lib/systemd/system",
+    "/usr/lib/systemd/system",
+    "/lib/systemd/system",
+}
+USER_UNIT_PATHS = {
+    "/etc/systemd/user",
+    "/run/systemd/user",
+    "/usr/local/lib/systemd/user",
+    "/usr/lib/systemd/user",
+}
+
 
 def manager_name(user: str | None) -> str:
     """
@@ -477,7 +493,12 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
       unit by a generator);
     - every unit is enabled and started once its service manager is reloaded,
       and once its own unit file is written;
-    - every purged unit is stopped and disabled before its unit file is removed.
+    - every purged unit is stopped and disabled before its unit file is
+      removed, even if the model says otherwise.
+
+    A unit file which is surely loaded by the service manager of a unit can
+    only be removed if the unit is purged: otherwise the unit is skipped once
+    its file is removed, without ever being stopped.
     """
     from inmanta_plugins.files.systemd_unit import SystemdUnitFileResource
 
@@ -503,8 +524,18 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
         unit_files = [f for f in files[host] if os.path.basename(f.path) == unit.name]
         if unit.purged:
             for unit_file in unit_files:
-                unit_file.requires.add(unit.id)
+                if unit_file.purged:
+                    unit.requires.discard(unit_file.id)
+                    unit_file.requires.add(unit.id)
             continue
+
+        unit_paths = SYSTEM_UNIT_PATHS if unit.user is None else USER_UNIT_PATHS
+        for unit_file in unit_files:
+            if unit_file.purged and os.path.dirname(unit_file.path) in unit_paths:
+                raise ValueError(
+                    f"The unit file {unit_file.path} is removed, but {unit.id} is not "
+                    "purged.  The unit would not be stopped, set purged=true on it."
+                )
 
         unit.requires.update(f.id for f in unit_files)
         unit_reload = reloads.get((host, manager_name(unit.user)))

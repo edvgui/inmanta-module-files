@@ -230,6 +230,53 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     assert (b.enabled, b.active) == (False, False)
 
 
+def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
+    """
+    A unit file can only be removed if its unit is purged: the unit is then
+    stopped and disabled before the file is removed, even if the model says
+    otherwise.  Otherwise the unit would be skipped once its file is removed,
+    without ever being stopped.  This is only checked for the unit files
+    which are surely loaded by the service manager of the unit.
+    """
+    model = """
+        import files
+        import mitogen
+        import std
+
+        host = std::Host(name="localhost", os=std::linux, via=mitogen::Local())
+
+        # Both purged: the unit is stopped before the file is removed
+        a_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/a.service", purged=true)
+        files::SystemdUnit(host=host, name="a.service", purged=true, requires=[a_file])
+
+        # Not loaded by the service manager of the unit, or not for sure
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
+        files::SystemdUnit(host=host, name="b.service", user="me", active=true)
+        files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/c.service", purged=true)
+        files::SystemdUnit(host=host, name="c.service", user="me", active=true)
+        files::SystemdUnitFile(host=host, path="/opt/app/d.service", purged=true)
+        files::SystemdUnit(host=host, name="d.service", active=true)
+    """
+    project.compile(model)
+
+    a = get_unit(project, "system/a.service")
+    a_file = project.get_resource(FILE, path="/etc/systemd/system/a.service")
+    assert a_file is not None
+    assert a_file.id not in a.requires
+    assert a.id in a_file.requires
+
+    # The unit file of the system manager is removed, but its unit is not purged
+    for path, user in [
+        ("/etc/systemd/system/e.service", "null"),
+        ("/usr/lib/systemd/user/e.service", '"me"'),
+    ]:
+        with pytest.raises(ValueError, match=r"e\.service\] is not purged"):
+            project.compile(model + f"""
+                files::SystemdUnitFile(host=host, path="{path}", purged=true)
+                files::SystemdUnit(host=host, name="e.service", user={user}, active=false)
+                """)
+
+
 def test_deploy(
     project: pytest_inmanta.plugin.Project, unit_name: str, tmp_path: pathlib.Path
 ) -> None:
