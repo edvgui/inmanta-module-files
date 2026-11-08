@@ -78,9 +78,22 @@ def unit_model(
     restart_on_change: bool = False,
     enabled: bool = True,
     install: bool = True,
-    config_files: collections.abc.Sequence[pathlib.Path] = (),
+    config_file: pathlib.Path | None = None,
+    config: str = "",
 ) -> str:
     path = pathlib.Path.home() / ".config/systemd/user" / name
+    config_files = (
+        f"""[
+            files::TextFile(
+                host=host,
+                path={json.dumps(str(config_file))},
+                content={json.dumps(config)},
+                permissions=null,
+            ),
+        ]"""
+        if config_file is not None
+        else "[]"
+    )
     return f"""
         import files
         import files::systemd_unit
@@ -116,7 +129,7 @@ def unit_model(
             active=true,
             purged={json.dumps(unit_purged)},
             restart_on_change={json.dumps(restart_on_change)},
-            config_files={json.dumps([str(f) for f in config_files])},
+            config_files={config_files},
         )
     """
 
@@ -150,7 +163,8 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     """
     All the units of a service manager share its reload, which happens after
     the unit files changed and before the units are started.  A purged unit is
-    stopped before its file is removed.
+    stopped before its file is removed.  The config files of a unit are
+    deployed before it.
     """
     project.compile("""
         import files
@@ -163,7 +177,8 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
         files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
         files::SystemdUnitFile(host=host, path="/home/me/.config/systemd/user/a.service")
 
-        files::SystemdUnit(host=host, name="a.service", active=true)
+        config = files::TextFile(host=host, path="/etc/a.env", content="")
+        files::SystemdUnit(host=host, name="a.service", active=true, config_files=[config])
         files::SystemdUnit(host=host, name="b.service", purged=true)
         files::SystemdUnit(host=host, name="c.service", enabled=false)
         files::SystemdUnit(host=host, name="a.service", user="me", active=true)
@@ -186,21 +201,20 @@ def test_model(project: pytest_inmanta.plugin.Project) -> None:
     b_file = files["/etc/systemd/system/b.service"]
     user_a_file = files["/home/me/.config/systemd/user/a.service"]
 
-    # Every unit file of the host is loaded by the reloads, which watch their folder
+    # Every unit file of the host is loaded by the reloads
     for reload in [system_reload, user_reload]:
         assert {a_file.id, b_file.id, user_a_file.id} <= reload.requires
-        assert reload.paths == [
-            "/etc/systemd/system",
-            "/home/me/.config/systemd/user",
-        ]
 
     a = get_unit(project, "system/a.service")
     b = get_unit(project, "system/b.service")
     c = get_unit(project, "system/c.service")
     user_a = get_unit(project, "user/me/a.service")
 
-    # The units start once their manager is reloaded, and their file is written
-    assert a.requires == {system_reload.id, a_file.id, user_a_file.id}
+    # The units start once their manager is reloaded, and their files are written
+    config = project.get_resource("files::TextFile", path="/etc/a.env")
+    assert config is not None
+    assert a.requires == {system_reload.id, a_file.id, user_a_file.id, config.id}
+    assert a.config_files == ["/etc/a.env"]
     assert c.requires == {system_reload.id}
     assert user_a.requires == {user_reload.id, a_file.id, user_a_file.id}
     assert (a.enabled, a.active) == (None, True)
@@ -220,8 +234,8 @@ def test_deploy(
     when its files change if it should, and stopped and disabled once purged.
     """
     config_file = tmp_path / "config"
-    config_file.write_text("a")
-    project.compile(unit_model(unit_name, config_files=[config_file]))
+    project.compile(unit_model(unit_name, config_file=config_file, config="a"))
+    project.deploy_resource("files::TextFile", change=const.Change.created)
 
     # The unit file doesn't exist yet
     project.deploy_resource(UNIT, status=const.ResourceState.skipped)
@@ -237,7 +251,10 @@ def test_deploy(
     pid = show(unit_name, "MainPID")
     project.compile(
         unit_model(
-            unit_name, exec_start="/usr/bin/sleep 3600", config_files=[config_file]
+            unit_name,
+            exec_start="/usr/bin/sleep 3600",
+            config_file=config_file,
+            config="a",
         )
     )
     deploy_unit_file(project)
@@ -248,7 +265,8 @@ def test_deploy(
         unit_model(
             unit_name,
             exec_start="/usr/bin/sleep 3600",
-            config_files=[config_file],
+            config_file=config_file,
+            config="a",
             restart_on_change=True,
         )
     )
@@ -261,7 +279,16 @@ def test_deploy(
 
     # The config file changes, the unit is restarted
     pid = show(unit_name, "MainPID")
-    config_file.write_text("b")
+    project.compile(
+        unit_model(
+            unit_name,
+            exec_start="/usr/bin/sleep 3600",
+            config_file=config_file,
+            config="b",
+            restart_on_change=True,
+        )
+    )
+    project.deploy_resource("files::TextFile", change=const.Change.updated)
     project.deploy_resource(UNIT, change=const.Change.updated)
     assert show(unit_name, "MainPID") != pid
     project.deploy_resource(UNIT, change=const.Change.nochange)
@@ -279,6 +306,34 @@ def test_deploy(
     project.deploy_resource(RELOAD, change=const.Change.updated)
     assert show(unit_name, "LoadState") == "not-found"
     project.deploy_resource(UNIT, change=const.Change.nochange)
+
+
+def test_reload_requires(
+    project: pytest_inmanta.plugin.Project, unit_name: str, tmp_path: pathlib.Path
+) -> None:
+    """
+    The service manager is reloaded when the folder of a file it requires
+    changed, even if it is not one of its unit paths (e.g. quadlet files).
+    """
+    project.compile(unit_model(unit_name) + f"""
+        files::SystemdDaemonReload(
+            host=host,
+            user={json.dumps(getpass.getuser())},
+            requires=[
+                files::TextFile(
+                    host=host,
+                    path={json.dumps(str(tmp_path / "app.container"))},
+                    content="",
+                    permissions=null,
+                ),
+            ],
+        )
+        """)
+    deploy_unit_file(project)
+
+    project.deploy_resource("files::TextFile", change=const.Change.created)
+    project.deploy_resource(RELOAD, change=const.Change.updated)
+    project.deploy_resource(RELOAD, change=const.Change.nochange)
 
 
 def test_deploy_failure(project: pytest_inmanta.plugin.Project, unit_name: str) -> None:

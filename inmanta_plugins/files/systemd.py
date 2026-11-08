@@ -213,9 +213,8 @@ class SystemctlHandler(inmanta_plugins.mitogen.abc.HandlerABC[R]):
     agent="host.name",
 )
 class SystemdDaemonReloadResource(SystemctlResource):
-    fields = ("manager", "paths", "loaded")  # type: ignore[assignment]
+    fields = ("manager", "loaded")  # type: ignore[assignment]
     manager: str
-    paths: list[str]
     loaded: bool
 
     @classmethod
@@ -225,15 +224,6 @@ class SystemdDaemonReloadResource(SystemctlResource):
         entity: inmanta.execute.proxy.DynamicProxy,
     ) -> str:
         return manager_name(entity.user)
-
-    @classmethod
-    def get_paths(
-        cls,
-        _: inmanta.export.Exporter,
-        entity: inmanta.execute.proxy.DynamicProxy,
-    ) -> list[str]:
-        # Filled in by the dependency manager, with the folders of the unit files
-        return []
 
     @classmethod
     def get_loaded(
@@ -249,7 +239,7 @@ class SystemdDaemonReloadHandler(SystemctlHandler[SystemdDaemonReloadResource]):
     """
     The service manager has loaded its units if none of the files it loads them
     from changed since it last did: the files in its unit paths (and their
-    drop-in folders), and in the folders of the unit files managed on the host
+    drop-in folders), and in the folders of the files this resource requires
     (e.g. the quadlet files, that a generator turns into units).
     """
 
@@ -265,7 +255,15 @@ class SystemdDaemonReloadHandler(SystemctlHandler[SystemdDaemonReloadResource]):
             for p in manager.get("UnitPath", "").split()
             if not SYSTEMD_OWNED_PATH.search(p)
         ]
-        modified_at = self.last_modified([*paths, *resource.paths], depth=2)
+        # The files of the host this resource requires, identified by their path
+        paths += sorted(
+            {
+                os.path.dirname(r.attribute_value)
+                for r in resource.requires
+                if r.attribute == "path" and r.agent_name == resource.id.agent_name
+            }
+        )
+        modified_at = self.last_modified(paths, depth=2)
         ctx.debug(
             "Units loaded at %(loaded_at)s, unit files modified at %(modified_at)s",
             loaded_at=str(loaded_at),
@@ -274,17 +272,6 @@ class SystemdDaemonReloadHandler(SystemctlHandler[SystemdDaemonReloadResource]):
         resource.loaded = loaded_at is not None and (
             modified_at is None or modified_at <= loaded_at
         )
-
-    def calculate_diff(
-        self,
-        ctx: inmanta.agent.handler.HandlerContext,
-        current: SystemdDaemonReloadResource,
-        desired: SystemdDaemonReloadResource,
-    ) -> dict[str, dict[str, typing.Any]]:
-        if desired.purged:
-            # The service manager can't be removed, we simply stop reloading it
-            return {}
-        return super().calculate_diff(ctx, current, desired)
 
     def update_resource(
         self,
@@ -348,6 +335,14 @@ class SystemdUnitResource(SystemctlResource):
         entity: inmanta.execute.proxy.DynamicProxy,
     ) -> bool | None:
         return True if entity.restart_on_change and not entity.purged else None
+
+    @classmethod
+    def get_config_files(
+        cls,
+        _: inmanta.export.Exporter,
+        entity: inmanta.execute.proxy.DynamicProxy,
+    ) -> list[str]:
+        return sorted(f.path for f in entity.config_files)
 
 
 @inmanta.agent.handler.provider("files::SystemdUnit", "")
@@ -477,9 +472,9 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
     host:
     - every unit file is written (or removed) before the service managers of
       its host are reloaded, which also look for changes in the folders of
-      these files: the file doesn't tell which manager loads it, and it may
-      not be in a unit path (e.g. a quadlet file, turned into a unit by a
-      generator);
+      the files they require: the file doesn't tell which manager loads it,
+      and it may not be in a unit path (e.g. a quadlet file, turned into a
+      unit by a generator);
     - every unit is enabled and started once its service manager is reloaded,
       and once its own unit file is written;
     - every purged unit is stopped and disabled before its unit file is removed.
@@ -502,7 +497,6 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
 
     for (host, _), daemon_reload in reloads.items():
         daemon_reload.requires.update(f.id for f in files[host])
-        daemon_reload.paths = sorted({os.path.dirname(f.path) for f in files[host]})
 
     for unit in units:
         host = unit.id.agent_name
