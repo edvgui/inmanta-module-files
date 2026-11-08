@@ -236,7 +236,8 @@ def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
     stopped and disabled before the file is removed, even if the model says
     otherwise.  Otherwise the unit would be skipped once its file is removed,
     without ever being stopped.  This is only checked for the unit files
-    which are surely loaded by the service manager of the unit.
+    which are surely loaded by the service manager of the unit.  A unit file
+    that is kept is still deployed before its purged unit.
     """
     model = """
         import files
@@ -248,6 +249,10 @@ def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
         # Both purged: the unit is stopped before the file is removed
         a_file = files::SystemdUnitFile(host=host, path="/etc/systemd/system/a.service", purged=true)
         files::SystemdUnit(host=host, name="a.service", purged=true, requires=[a_file])
+
+        # Only the unit is purged: the file is deployed first
+        files::SystemdUnitFile(host=host, path="/etc/systemd/system/f.service")
+        files::SystemdUnit(host=host, name="f.service", purged=true)
 
         # Not loaded by the service manager of the unit, or not for sure
         files::SystemdUnitFile(host=host, path="/etc/systemd/system/b.service", purged=true)
@@ -264,6 +269,12 @@ def test_model_purged_unit_file(project: pytest_inmanta.plugin.Project) -> None:
     assert a_file is not None
     assert a_file.id not in a.requires
     assert a.id in a_file.requires
+
+    f = get_unit(project, "system/f.service")
+    f_file = project.get_resource(FILE, path="/etc/systemd/system/f.service")
+    assert f_file is not None
+    assert f.requires == {f_file.id}
+    assert f.id not in f_file.requires
 
     # The unit file of the system manager is removed, but its unit is not purged
     for path, user in [

@@ -494,7 +494,8 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
     - every unit is enabled and started once its service manager is reloaded,
       and once its own unit file is written;
     - every purged unit is stopped and disabled before its unit file is
-      removed, even if the model says otherwise.
+      removed, even if the model says otherwise, or after it is written if
+      the file is kept.
 
     A unit file which is surely loaded by the service manager of a unit can
     only be removed if the unit is purged: otherwise the unit is skipped once
@@ -527,6 +528,8 @@ def systemd_dependencies(model: ModelDict, resources: ResourceDict) -> None:
                 if unit_file.purged:
                     unit.requires.discard(unit_file.id)
                     unit_file.requires.add(unit.id)
+                else:
+                    unit.requires.add(unit_file.id)
             continue
 
         unit_paths = SYSTEM_UNIT_PATHS if unit.user is None else USER_UNIT_PATHS
