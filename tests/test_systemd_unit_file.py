@@ -43,6 +43,7 @@ ExecStartPre=/usr/bin/podman network create --ignore --subnet=172.42.0.0/24 inma
 ExecStart=/usr/bin/bash -c "/usr/bin/sleep infinity & /usr/bin/podman network inspect inmanta-orchestrator-net"
 ExecStopPost=/usr/bin/podman network rm -f inmanta-orchestrator-net
 Type=forking
+SuccessExitStatus=143 SIGTERM
 
 [Install]
 WantedBy=default.target
@@ -125,6 +126,7 @@ a\"\"\"}},
                 exec_start="/usr/bin/bash -c \\"/usr/bin/sleep infinity & /usr/bin/podman network inspect inmanta-orchestrator-net\\"",
                 exec_stop_post=["/usr/bin/podman network rm -f inmanta-orchestrator-net"],
                 type="forking",
+                success_exit_status=["143", "SIGTERM"],
             ),
             install=Install(
                 wanted_by=["default.target"],

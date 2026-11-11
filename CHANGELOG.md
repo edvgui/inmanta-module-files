@@ -2,6 +2,7 @@
 
 ## v2.12.1 - ?
 
+- Add `files::systemd_unit::Service.success_exit_status` (`SuccessExitStatus=`): exit codes and signals also considered a successful termination of the main process
 
 ## v2.12.0 - 2026-11-08
 

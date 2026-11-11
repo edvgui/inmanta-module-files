@@ -128,6 +128,10 @@ entity Service:
         will cause all members of the service's control group to be processed.
     :attr pid_file: If the service type is marked as “forking”, this directive is used to set the path of the file
         that should contain the process ID number of the main child that should be monitored.
+    :attr success_exit_status: Exit codes (e.g. "143") and signal names (e.g. "SIGTERM") that, on top of 0 and
+        the clean signals, are considered a successful termination of the main process (SuccessExitStatus=).  E.g.
+        a process killed by the stop signal exits with 143 (128 + 15): without it, stopping the unit marks it as
+        failed and triggers its OnFailure= units.
     """
     dict environment = {}
     string[] environment_file = []
@@ -145,6 +149,7 @@ entity Service:
     service_type_t? type = null
     string? notify_access = null
     string? pid_file = null
+    string[] success_exit_status = []
 end
 
 
