@@ -10,7 +10,8 @@
 - Add `files::systemd_unit::directive` plugin, to write the lines of a systemd directive from a jinja template, rejecting the values which can not be represented in a unit file.
 - Fail the compile when a value of a `files::SystemdUnitFile` contains a newline or ends with a backslash, instead of generating a broken unit file.
 - Quote the paths of `RequiresMountsFor=` containing whitespace, quotes or backslashes.
-- Allow non-string values and validate variable names in `files::systemd_unit::Service.environment`.
+- Allow non-string and reference values, and validate variable names in `files::systemd_unit::Service.environment`.
+- Allow references in `files::systemd_unit::quote`, which then returns a reference to the quoted value.
 - Remove `files::systemd_unit::Service.exec_stop_pre`: `ExecStopPre=` is not a systemd directive, it was ignored by systemd.
 
 ## v2.12.0 - 2026-11-08

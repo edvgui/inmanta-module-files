@@ -431,6 +431,7 @@ def test_references(
         project,
         """
             service=Service(
+                environment={"SECRET": std::create_environment_reference("SECRET")},
                 exec_start=std::create_environment_reference("COMMAND"),
                 exec_start_pre=[std::create_environment_reference("COMMAND")],
             ),
@@ -442,8 +443,11 @@ def test_references(
         project.get_instances("files::SystemdUnitFile")[0]
     )
     monkeypatch.setenv("COMMAND", "/bin/echo hi")
+    # Quoted values are escaped once resolved
+    monkeypatch.setenv("SECRET", 'a"b\nc\\')
     assert unit_file.content.resolve(PythonLogger(logging.getLogger())) == """
 [Service]
+Environment="SECRET=a\\"b\\nc\\\\"
 ExecStartPre=/bin/echo hi
 ExecStart=/bin/echo hi
 
