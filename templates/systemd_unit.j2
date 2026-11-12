@@ -83,6 +83,9 @@ NotifyAccess={{ unit_file.service.notify_access }}
 {%- if unit_file.service.pid_file is not none %}
 PIDFile={{ unit_file.service.pid_file }}
 {%- endif %}
+{%- if unit_file.service.success_exit_status %}
+SuccessExitStatus={{ unit_file.service.success_exit_status | join(" ") }}
+{%- endif %}
 
 {% endif -%}
 
