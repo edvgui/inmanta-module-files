@@ -1,8 +1,16 @@
 # Changelog
 
-## v2.12.1 - ?
+## v2.13.0 - ?
 
 - Add `files::systemd_unit::Service.success_exit_status` (`SuccessExitStatus=`): exit codes and signals also considered a successful termination of the main process
+- Add an `extra` dict to all the `files::systemd_unit` sections, to set any directive that doesn't have a dedicated attribute.
+- Add `conflicts`, `start_limit_interval_sec`, `start_limit_burst` to `files::systemd_unit::Unit`, `user`, `group`, `working_directory`, `exec_reload`, `remain_after_exit`, `kill_mode` to `files::systemd_unit::Service`, `on_boot_sec`, `on_unit_active_sec`, `persistent` to `files::systemd_unit::Timer` and `listen_datagram`, `accept`, `socket_mode` to `files::systemd_unit::Socket`.
+- Add `files::systemd_unit::escape_specifiers` plugin, to use a value containing `%` literally in a unit file.
+- Add `files::systemd_unit::directive` plugin, to write the lines of a systemd directive from a jinja template, rejecting the values which can not be represented in a unit file.
+- Fail the compile when a value of a `files::SystemdUnitFile` contains a newline or ends with a backslash, instead of generating a broken unit file.
+- Quote the paths of `RequiresMountsFor=` containing whitespace, quotes or backslashes.
+- Allow non-string values and validate variable names in `files::systemd_unit::Service.environment`.
+- Remove `files::systemd_unit::Service.exec_stop_pre`: `ExecStopPre=` is not a systemd directive, it was ignored by systemd.
 
 ## v2.12.0 - 2026-11-08
 
