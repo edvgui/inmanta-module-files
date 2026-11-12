@@ -327,3 +327,76 @@ def test_one_pass_unset_discovery(project: Project, tmp_path: pathlib.Path) -> N
     assert max(pass_sizes) == 3
     # One discovery render that collected the batch, then one clean render.
     assert render_count == 2
+
+
+def test_concat(
+    project: Project, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from inmanta_plugins.std import EnvironmentReference
+
+    from inmanta_plugins.files import JinjaReference, TextReference
+
+    (tmp_path / "a.j2").write_text(
+        """A={{ "A" | std.create_environment_reference() }}\n"""
+    )
+    (tmp_path / "b.j2").write_text(
+        """A={{ "A" | std.create_environment_reference() }}\n"""
+        """B={{ "B" | std.create_environment_reference() }}\n"""
+    )
+
+    project.compile(
+        f"""
+        import std
+        import files
+        import mitogen
+
+        host = std::Host(
+            name="localhost",
+            os=std::linux,
+            via=mitogen::Local(),
+        )
+
+        files::TextFile(
+            path="/strings",
+            content=files::concat(["a", "b"]),
+            host=host,
+        )
+
+        files::TextFile(
+            path="/references",
+            content=files::concat(
+                [
+                    files::jinja("file://{tmp_path / "a.j2"}"),
+                    "{{{{ not a template }}}}\\n",
+                    files::jinja("file://{tmp_path / "b.j2"}"),
+                    std::create_environment_reference("C"),
+                ]
+            ),
+            host=host,
+        )
+        """,
+        no_dedent=False,
+    )
+
+    files = {
+        f.path: inmanta.plugins.allow_reference_values(f)
+        for f in project.get_instances("files::TextFile")
+    }
+    assert files["/strings"].content == "ab"
+
+    # The jinja references are merged into a single one
+    content = files["/references"].content
+    assert isinstance(content, JinjaReference)
+    assert isinstance(content.template, TextReference)
+    references = list(content.references.values())
+    assert len(references) == 3
+    for name in ["A", "B", "C"]:
+        assert EnvironmentReference(name) in references
+
+    monkeypatch.setenv("A", "a")
+    monkeypatch.setenv("B", "b")
+    monkeypatch.setenv("C", "c")
+    # The trailing newline of a template file is dropped by jinja
+    assert content.resolve(PythonLogger(LOGGER)) == (
+        "A=a{{ not a template }}\nA=a\nB=bc"
+    )

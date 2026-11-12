@@ -2,6 +2,7 @@
 
 ## v2.13.0 - ?
 
+- Add `files::concat` plugin, to concatenate strings and references (e.g. the outputs of `files::jinja`) into a single value.
 - Add `files::systemd_unit::Service.success_exit_status` (`SuccessExitStatus=`): exit codes and signals also considered a successful termination of the main process
 - Add an `extra` dict to all the `files::systemd_unit` sections, to set any directive that doesn't have a dedicated attribute.
 - Add `conflicts`, `start_limit_interval_sec`, `start_limit_burst` to `files::systemd_unit::Unit`, `user`, `group`, `working_directory`, `exec_reload`, `remain_after_exit`, `kill_mode` to `files::systemd_unit::Service`, `on_boot_sec`, `on_unit_active_sec`, `persistent` to `files::systemd_unit::Timer` and `listen_datagram`, `accept`, `socket_mode` to `files::systemd_unit::Socket`.
