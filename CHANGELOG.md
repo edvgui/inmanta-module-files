@@ -11,7 +11,7 @@
 - Fail the compile when a value of a `files::SystemdUnitFile` contains a newline or ends with a backslash, instead of generating a broken unit file.
 - Quote the paths of `RequiresMountsFor=` containing whitespace, quotes or backslashes.
 - Allow non-string and reference values, and validate variable names in `files::systemd_unit::Service.environment`.
-- Allow references in `files::systemd_unit::quote`, the value is escaped once the reference is resolved.
+- Allow references in `files::systemd_unit::quote`, which then returns a reference to the quoted value.
 - Remove `files::systemd_unit::Service.exec_stop_pre`: `ExecStopPre=` is not a systemd directive, it was ignored by systemd.
 
 ## v2.12.0 - 2026-11-08

@@ -24,7 +24,7 @@ import inmanta.resources
 import inmanta_plugins.files.base
 from inmanta.plugins import PluginException, plugin
 from inmanta.references import Reference, reference
-from inmanta_plugins.files import register_reference
+from inmanta_plugins.files import concat
 
 DIRECTIVE_NAME = re.compile(r"[A-Z][A-Za-z0-9]*")
 ENVIRONMENT_VARIABLE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -54,7 +54,7 @@ def _raw(value: str, directive: str) -> str:
 
 def _word(value: str, directive: str) -> str:
     if any(c.isspace() or c in "\"'\\" for c in _single_line(value, directive)):
-        return quote(value)
+        return _quote(value)
     return value
 
 
@@ -72,7 +72,7 @@ def directive(
     *,
     joined: bool = False,
     quoted: bool = False,
-) -> str:
+) -> str | Reference[str]:
     """
     Build the "<key>=<value>" lines of a directive of a systemd unit file, to
     be used in a template, e.g. {{- "After" | files.systemd_unit.directive(unit.after) }}
@@ -85,9 +85,9 @@ def directive(
     backslash can not be represented in a unit file (the line would be broken
     or merged with the next one), it is rejected.
 
-    Reference values are not checked, they are added to the template as
-    references to resolve at deploy time, which requires the template to be
-    rendered with the files::jinja plugin.
+    Reference values are not checked.  If any value is a reference, the lines
+    are returned as a reference, resolved at deploy time, which requires the
+    template to be rendered with the files::jinja plugin.
 
     :param key: The name of the directive.
     :param value: The value of the directive, or a list of values to write
@@ -106,27 +106,31 @@ def directive(
 
     items = [value] if isinstance(value, str | int | bool | Reference) else list(value)
     check = _word if quoted else _raw
-    lines = [
-        (
-            register_reference(item)
-            if isinstance(item, Reference)
-            else check(_to_str(item), key)
-        )
+    values = [
+        item if isinstance(item, Reference) else check(_to_str(item), key)
         for item in items
     ]
+    parts: list[str | Reference[str]] = []
     if joined:
-        return f"\n{key}=" + " ".join(lines)
-    return "".join(f"\n{key}={line}" for line in lines)
+        parts.append(f"\n{key}=")
+        for i, v in enumerate(values):
+            parts.extend([" ", v] if i else [v])
+    else:
+        for v in values:
+            parts.extend([f"\n{key}=", v])
+    return concat(parts)
 
 
 @plugin
-def environment(name: str, value: str | int | bool | Reference[str]) -> str:
+def environment(
+    name: str, value: str | int | bool | Reference[str]
+) -> str | Reference[str]:
     """
     Build the quoted value of an Environment= directive, assigning the
     given value to the given variable name.
 
-    A reference value is escaped once resolved, which requires the template
-    to be rendered with the files::jinja plugin.
+    If the value is a reference, the quoted value is returned as a reference,
+    quoted once resolved.
 
     :param name: The name of the environment variable.
     :param value: The value of the environment variable.
@@ -134,8 +138,8 @@ def environment(name: str, value: str | int | bool | Reference[str]) -> str:
     if not ENVIRONMENT_VARIABLE_NAME.fullmatch(name):
         raise PluginException(f"Invalid environment variable name: {name!r}")
     if isinstance(value, Reference):
-        return '"' + _escape(name + "=") + _escape_reference(value) + '"'
-    return quote(name + "=" + _to_str(value))
+        return quote(concat([name + "=", value]))
+    return _quote(name + "=" + _to_str(value))
 
 
 @plugin
@@ -151,7 +155,7 @@ def escape_specifiers(value: str) -> str:
     return value.replace("%", "%%")
 
 
-def _escape(s: str) -> str:
+def _quote(s: str) -> str:
     escaped_chars = {
         "\\": "\\\\",
         "\n": "\\n",
@@ -160,14 +164,14 @@ def _escape(s: str) -> str:
     }
     for k, v in escaped_chars.items():
         s = s.replace(k, v)
-    return s
+
+    return '"' + s + '"'
 
 
-@reference("files::SystemdEscapeReference")
-class SystemdEscapeReference(Reference[str]):
+@reference("files::SystemdQuoteReference")
+class SystemdQuoteReference(Reference[str]):
     """
-    Reference to a value escaped to be placed between double quotes in a
-    systemd unit file, cf. quote.
+    Reference to a value quoted for a systemd unit file, cf. quote.
     """
 
     def __init__(self, value: str | Reference[str]) -> None:
@@ -175,16 +179,11 @@ class SystemdEscapeReference(Reference[str]):
         self.value = value
 
     def resolve(self, logger: inmanta.agent.handler.LoggerABC) -> str:
-        return _escape(self.resolve_other(self.value, logger))
-
-
-def _escape_reference(value: Reference[str]) -> str:
-    # Emits the escaped reference in the template being rendered by files::jinja
-    return register_reference(SystemdEscapeReference(value))
+        return _quote(self.resolve_other(self.value, logger))
 
 
 @plugin
-def quote(s: str | Reference[str]) -> str:
+def quote(s: str | Reference[str]) -> str | Reference[str]:
     """
     Quote a string with double quotes and escape the following characters:
     - double-quotes
@@ -198,12 +197,12 @@ def quote(s: str | Reference[str]) -> str:
     unit context where quoting is allowed.  Specifiers (e.g. "%n") are still resolved
     by systemd, use escape_specifiers to use a "%" literally.
 
-    A reference is escaped once resolved, which requires the template to be
-    rendered with the files::jinja plugin.
+    If the value is a reference, the quoted value is returned as a reference,
+    quoted once resolved.
     """
     if isinstance(s, Reference):
-        return '"' + _escape_reference(s) + '"'
-    return '"' + _escape(s) + '"'
+        return SystemdQuoteReference(s)
+    return _quote(s)
 
 
 @inmanta.resources.resource(
