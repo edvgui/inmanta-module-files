@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.13.0 - ?
+## v2.13.0 - 2026-11-12
 
 - Add `files::concat` plugin, to concatenate strings and references (e.g. the outputs of `files::jinja`) into a single value.
 - Add `files::systemd_unit::Service.success_exit_status` (`SuccessExitStatus=`): exit codes and signals also considered a successful termination of the main process
