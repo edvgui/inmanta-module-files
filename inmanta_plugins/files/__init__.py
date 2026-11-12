@@ -24,7 +24,7 @@ import logging
 import pathlib
 import typing
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import jinja2
 from inmanta_plugins.config import resolve_path
@@ -583,3 +583,44 @@ def jinja(
             template=create_text_reference("{% raw %}" + rendered + "{% endraw %}"),
             references=context,
         )
+
+
+@plugin
+def concat(parts: Sequence[str | Reference[str]]) -> str | Reference[str]:
+    """
+    Concatenate strings, any of which may be a reference (e.g. the output of
+    files::jinja).  If no part is a reference, the concatenated string is
+    returned.  Otherwise, a single files::JinjaReference is returned, which
+    resolves to the concatenation of all the parts: the files::JinjaReference
+    parts are merged into it (their templates are concatenated), other
+    references are resolved when it is resolved.
+
+    :param parts: The strings and references to concatenate, in order.
+    """
+    if all(isinstance(part, str) for part in parts):
+        return "".join(typing.cast(Sequence[str], parts))
+
+    templates: list[str] = []
+    references: dict[str, str | Reference[str]] = {}
+    for part in parts:
+        match part:
+            case str():
+                templates.append("{% raw %}" + part + "{% endraw %}")
+            case TextReference(text=str() as text):
+                templates.append("{% raw %}" + text + "{% endraw %}")
+            case JinjaReference(template=str() as template) | JinjaReference(
+                template=TextReference(text=str() as template)
+            ):
+                # The references of a JinjaReference are keyed by their id,
+                # the same key always maps to the same reference
+                templates.append(template)
+                references.update(part.references)
+            case _:
+                ref_id, _ = part.serialize_arguments()
+                references[str(ref_id)] = part
+                templates.append(f'{{{{ references["{str(ref_id)}"] }}}}')
+
+    return JinjaReference(
+        template=create_text_reference("".join(templates)),
+        references=references,
+    )
