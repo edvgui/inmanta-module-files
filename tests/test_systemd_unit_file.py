@@ -448,3 +448,33 @@ ExecStartPre=/bin/echo hi
 ExecStart=/bin/echo hi
 
 """.lstrip("\n")
+
+
+def test_directive() -> None:
+    from inmanta_plugins.files.systemd_unit import directive
+
+    assert directive("After", None) == ""
+    assert directive("After", []) == ""
+    assert (
+        directive("After", ["a.target", "b.target"])
+        == "\nAfter=a.target\nAfter=b.target"
+    )
+    assert directive("TimeoutSec", 10) == "\nTimeoutSec=10"
+    assert directive("Persistent", False) == "\nPersistent=false"
+    assert (
+        directive("Alias", ["a.service", "b.service"], joined=True)
+        == "\nAlias=a.service b.service"
+    )
+    assert directive("Alias", [], joined=True) == "\nAlias="
+    assert (
+        directive(
+            "RequiresMountsFor",
+            ["%t/a", "/mnt/my disk", "/mnt/a\\"],
+            joined=True,
+            quoted=True,
+        )
+        == '\nRequiresMountsFor=%t/a "/mnt/my disk" "/mnt/a\\\\"'
+    )
+
+    with pytest.raises(Exception, match="Invalid systemd directive name"):
+        directive("after", "a.target")
