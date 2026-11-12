@@ -81,6 +81,15 @@ entity Unit:
         units. When systemd stops or restarts the units listed here, the action is propagated to this unit.
         Note that this is a one-way dependency — changes to this unit do not affect the listed units.
     :attr on_failure: one or more units that are activated when this unit enters the "failed" state.
+    :attr conflicts: Units that can not run at the same time as this unit.  Starting this unit stops
+        the listed units, and starting one of the listed units stops this unit.
+    :attr start_limit_interval_sec: Interval (in seconds) during which the unit can be started at
+        most start_limit_burst times.
+    :attr start_limit_burst: Amount of starts allowed within start_limit_interval_sec.
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"DefaultDependencies": false, "ConditionPathExists": ["/etc/a", "/etc/b"]}
     """
     string? description = null
     string[]? documentation = null
@@ -92,6 +101,10 @@ entity Unit:
     string[] after = []
     string[] part_of = []
     string[]? on_failure = null
+    string[] conflicts = []
+    int? start_limit_interval_sec = null
+    int? start_limit_burst = null
+    dict extra = {}
 end
 
 
@@ -99,7 +112,7 @@ entity Service:
     """
     The [Service] section is used to provide configuration that is only applicable for services.
 
-    source: https://www.digitaloce                                              an.com/community/tutorials/understanding-systemd-units-and-unit-files
+    source: https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files
 
     :attr exec_start:  This specifies the full path and the arguments of the command to be executed to start
         the process. This may only be specified once (except for “oneshot” services). If the path to the
@@ -132,6 +145,18 @@ entity Service:
         the clean signals, are considered a successful termination of the main process (SuccessExitStatus=).  E.g.
         a process killed by the stop signal exits with 143 (128 + 15): without it, stopping the unit marks it as
         failed and triggers its OnFailure= units.
+    :attr user: The user the processes of the service are executed as.
+    :attr group: The group the processes of the service are executed as.
+    :attr working_directory: The working directory of the processes of the service.
+    :attr exec_reload: Commands to execute to trigger a configuration reload of the service.
+    :attr remain_after_exit: Whether the service shall be considered active even when all its processes
+        exited.  Mostly useful for "oneshot" services.
+    :attr kill_mode: How the processes of the unit are killed when it is stopped: "control-group",
+        "mixed", "process" or "none".
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"LimitNOFILE": 65536, "ReadWritePaths": ["/var/lib/a", "/var/lib/b"]}
     """
     dict environment = {}
     string[] environment_file = []
@@ -143,13 +168,19 @@ entity Service:
     string[] exec_start_pre = []
     string? exec_start = null
     string[] exec_start_post = []
-    string[] exec_stop_pre = []
     string? exec_stop = null
     string[] exec_stop_post = []
     service_type_t? type = null
     string? notify_access = null
     string? pid_file = null
     string[] success_exit_status = []
+    string? user = null
+    string? group = null
+    string? working_directory = null
+    string[] exec_reload = []
+    bool? remain_after_exit = null
+    string? kill_mode = null
+    dict extra = {}
 end
 
 
@@ -177,10 +208,15 @@ entity Install:
     :attr required_by: This directive is very similar to the WantedBy= directive, but instead specifies a required dependency that
         will cause the activation to fail if not met. When enabled, a unit with this directive will create a directory
         ending with .requires.
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"Also": "a.socket"}
     """
     string[]? alias = null
     string[] wanted_by = []
     string[] required_by = []
+    dict extra = {}
 end
 
 
@@ -194,11 +230,24 @@ entity Timer:
     :attr accuracy_sec: Specify the accuracy the timer shall elapse with. Defaults to 1min.
     :attr randomized_delay_sec: Delay the timer by a randomly selected, evenly distributed amount of time between 0 and the specified time value.
     :attr unit: The unit to activate when this timer elapses. The argument is a unit name, whose suffix is not ".timer".
+    :attr on_boot_sec: Defines a timer relative to when the machine was booted up.
+    :attr on_unit_active_sec: Defines a timer relative to when the unit the timer activates was last activated.
+    :attr persistent: If true, the time when the service unit was last triggered is stored on disk.  When the timer
+        is activated, the service unit is triggered immediately if it would have been triggered at least once during
+        the time when the timer was inactive.  Only applies to on_calendar timers.
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"WakeSystem": true}
     """
     string? on_calendar = null
     string? accuracy_sec = null
     string? randomized_delay_sec = null
     string? unit = null
+    string? on_boot_sec = null
+    string? on_unit_active_sec = null
+    bool? persistent = null
+    dict extra = {}
 end
 
 
@@ -212,9 +261,21 @@ entity Socket:
            datagram (SOCK_DGRAM), or sequential packet (SOCK_SEQPACKET)
            socket, respectively.
     :attr service: Specifies the service unit name to activate on incoming traffic.
+    :attr listen_datagram: Specifies an address to listen on for a datagram (SOCK_DGRAM) socket.
+    :attr accept: If true, a service instance is spawned for each incoming connection and only the connection
+        socket is passed to it.  If false, all listening sockets themselves are passed to the started service unit.
+    :attr socket_mode: The file system access mode used when creating the file system socket nodes, in octal notation.
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"Backlog": 128}
     """
     string[] listen_stream = []
     string? service = null
+    string[] listen_datagram = []
+    bool? accept = null
+    string? socket_mode = null
+    dict extra = {}
 end
 
 
@@ -244,6 +305,10 @@ entity Mount:
         created if needed. This option specifies the file system access mode used when creating these
         directories.
     :attr timeout_sec: Configures the time to wait for the mount command to finish.
+    :attr extra: Any other directive of the section, which doesn't have a dedicated attribute.  The keys
+        are the directive names, the values are written as is in the unit file (only rejected if they contain
+        a newline or end with a backslash).  A list value results in one line per item, for directives that
+        can be repeated, a null value is skipped.  e.g. {"User": "nobody"}
     """
     string what
     string where
@@ -255,6 +320,7 @@ entity Mount:
     bool? force_unmount = null
     string? directory_mode = null
     int? timeout_sec = null
+    dict extra = {}
 end
 
 
