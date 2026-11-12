@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.13.1 - ?
+
+
 ## v2.13.0 - 2026-11-12
 
 - Add `files::concat` plugin, to concatenate strings and references (e.g. the outputs of `files::jinja`) into a single value.
