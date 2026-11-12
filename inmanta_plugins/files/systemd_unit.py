@@ -23,7 +23,7 @@ import inmanta.agent.handler
 import inmanta.resources
 import inmanta_plugins.files.base
 from inmanta.plugins import PluginException, plugin
-from inmanta.references import Reference
+from inmanta.references import Reference, reference
 from inmanta_plugins.files import register_reference
 
 DIRECTIVE_NAME = re.compile(r"[A-Z][A-Za-z0-9]*")
@@ -120,16 +120,21 @@ def directive(
 
 
 @plugin
-def environment(name: str, value: str | int | bool) -> str:
+def environment(name: str, value: str | int | bool | Reference[str]) -> str:
     """
     Build the quoted value of an Environment= directive, assigning the
     given value to the given variable name.
+
+    A reference value is escaped once resolved, which requires the template
+    to be rendered with the files::jinja plugin.
 
     :param name: The name of the environment variable.
     :param value: The value of the environment variable.
     """
     if not ENVIRONMENT_VARIABLE_NAME.fullmatch(name):
         raise PluginException(f"Invalid environment variable name: {name!r}")
+    if isinstance(value, Reference):
+        return '"' + _escape(name + "=") + _escape_reference(value) + '"'
     return quote(name + "=" + _to_str(value))
 
 
@@ -146,8 +151,40 @@ def escape_specifiers(value: str) -> str:
     return value.replace("%", "%%")
 
 
+def _escape(s: str) -> str:
+    escaped_chars = {
+        "\\": "\\\\",
+        "\n": "\\n",
+        "\r": "\\r",
+        '"': '\\"',
+    }
+    for k, v in escaped_chars.items():
+        s = s.replace(k, v)
+    return s
+
+
+@reference("files::SystemdEscapeReference")
+class SystemdEscapeReference(Reference[str]):
+    """
+    Reference to a value escaped to be placed between double quotes in a
+    systemd unit file, cf. quote.
+    """
+
+    def __init__(self, value: str | Reference[str]) -> None:
+        super().__init__()
+        self.value = value
+
+    def resolve(self, logger: inmanta.agent.handler.LoggerABC) -> str:
+        return _escape(self.resolve_other(self.value, logger))
+
+
+def _escape_reference(value: Reference[str]) -> str:
+    # Emits the escaped reference in the template being rendered by files::jinja
+    return register_reference(SystemdEscapeReference(value))
+
+
 @plugin
-def quote(s: str) -> str:
+def quote(s: str | Reference[str]) -> str:
     """
     Quote a string with double quotes and escape the following characters:
     - double-quotes
@@ -160,17 +197,13 @@ def quote(s: str) -> str:
     The returned string should be the equivalent value for that string in a systemd
     unit context where quoting is allowed.  Specifiers (e.g. "%n") are still resolved
     by systemd, use escape_specifiers to use a "%" literally.
-    """
-    escaped_chars = {
-        "\\": "\\\\",
-        "\n": "\\n",
-        "\r": "\\r",
-        '"': '\\"',
-    }
-    for k, v in escaped_chars.items():
-        s = s.replace(k, v)
 
-    return '"' + s + '"'
+    A reference is escaped once resolved, which requires the template to be
+    rendered with the files::jinja plugin.
+    """
+    if isinstance(s, Reference):
+        return '"' + _escape_reference(s) + '"'
+    return '"' + _escape(s) + '"'
 
 
 @inmanta.resources.resource(
